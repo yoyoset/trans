@@ -1,8 +1,6 @@
 // opencode serve over HTTP. The message endpoint is synchronous, so only total latency is
 // measured (no first-token time). All tools are disabled per request using the server's tool id list.
-import { SYSTEM_PROMPT, userMessage } from "../prompt.mjs";
-
-export function createOpencodeProvider({ baseUrl = "http://127.0.0.1:4096", providerID, modelID, variant, label = `opencode-serve-${providerID}/${modelID}${variant ? `@${variant}` : ""}` }) {
+export function createOpencodeProvider({ prompt, baseUrl = "http://127.0.0.1:4096", providerID, modelID, variant, label = `opencode-serve-${providerID}/${modelID}${variant ? `@${variant}` : ""}` }) {
   let toolsOff = {};
 
   async function call(method, route, body) {
@@ -32,9 +30,9 @@ export function createOpencodeProvider({ baseUrl = "http://127.0.0.1:4096", prov
       const reply = await call("POST", `/session/${session.id}/message`, {
         model: { providerID, modelID },
         ...(variant ? { variant } : {}),
-        system: SYSTEM_PROMPT,
+        system: prompt.system,
         tools: toolsOff,
-        parts: [{ type: "text", text: userMessage(c) }],
+        parts: [{ type: "text", text: prompt.user(c) }],
       });
       const parts = reply.parts ?? [];
       const raw = parts.filter((p) => p.type === "text").map((p) => p.text).join("");

@@ -1,9 +1,10 @@
-// M0 translation benchmark: same cases + same prompt envelope across providers.
-// Usage: node bench.mjs <llama|pi|opencode>... [--model provider/model]
+// M0 translation benchmark: same cases + same prompt version across providers.
+// Usage: node bench.mjs <llama|pi|opencode>... [--model provider/model] [--variant low]
+//        [--prompt v1|v2] [--llama-url http://127.0.0.1:8765] [--label name]
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseOutput } from "./prompt.mjs";
+import { PROMPTS, parseOutput, validateTranslation } from "./prompt.mjs";
 import { createLlamaProvider } from "./providers/llama.mjs";
 import { createOpencodeProvider } from "./providers/opencode.mjs";
 import { createPiProvider } from "./providers/pi-rpc.mjs";
@@ -12,19 +13,27 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const { cases } = JSON.parse(readFileSync(path.join(here, "cases.json"), "utf8"));
 
 const argv = process.argv.slice(2);
-const modelFlag = argv.indexOf("--model");
-const model = modelFlag >= 0 ? argv.splice(modelFlag, 2)[1] : "opencode/deepseek-v4-flash";
-const variantFlag = argv.indexOf("--variant");
-const variant = variantFlag >= 0 ? argv.splice(variantFlag, 2)[1] : undefined; // opencode reasoning effort, e.g. low
+const flag = (name, fallback) => {
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv.splice(i, 2)[1] : fallback;
+};
+const model = flag("--model", "opencode/deepseek-v4-flash");
+const variant = flag("--variant"); // opencode reasoning effort, e.g. low
+const promptVersion = flag("--prompt", "v1");
+const llamaUrl = flag("--llama-url", "http://127.0.0.1:8765");
+const labelOverride = flag("--label");
+const prompt = PROMPTS[promptVersion];
+if (!prompt) throw new Error(`unknown prompt ${promptVersion}; expected ${Object.keys(PROMPTS).join("|")}`);
+
 const sandbox = process.env.BENCH_SANDBOX ?? here; // agent cwd; tools are disabled anyway
 // Split at the first slash only: OpenRouter ids contain more slashes (openrouter/~deepseek/x).
 const slash = model.indexOf("/");
 const [providerID, modelID] = [model.slice(0, slash), model.slice(slash + 1)];
 
 const factories = {
-  llama: () => createLlamaProvider(),
-  pi: () => createPiProvider({ model, cwd: sandbox }),
-  opencode: () => createOpencodeProvider({ providerID, modelID, variant }),
+  llama: () => createLlamaProvider({ prompt, baseUrl: llamaUrl, ...(labelOverride ? { label: labelOverride } : {}) }),
+  pi: () => createPiProvider({ prompt, model, cwd: sandbox }),
+  opencode: () => createOpencodeProvider({ prompt, providerID, modelID, variant }),
 };
 
 for (const name of argv) {
@@ -34,7 +43,8 @@ for (const name of argv) {
 }
 
 async function runProvider(provider) {
-  console.log(`\n=== ${provider.label} ===`);
+  const label = `${provider.label}#${promptVersion}`;
+  console.log(`\n=== ${label} ===`);
   const startInfo = await provider.start();
   if (startInfo) console.log("start:", JSON.stringify(startInfo));
 
@@ -44,37 +54,51 @@ async function runProvider(provider) {
 
   const results = [];
   for (const c of cases) {
-    let r;
-    try {
-      const out = await provider.translate(c);
-      const parsed = parseOutput(out.raw);
-      r = { id: c.id, ...round(out), parsed: parsed.ok, error: parsed.ok ? undefined : parsed.error, translation: parsed.value?.translation, back: parsed.value?.back_translation, raw: parsed.ok ? undefined : out.raw };
-    } catch (e) {
-      r = { id: c.id, parsed: false, error: e.message };
-    }
-    results.push(r);
-    const t = r.firstTokenMs != null ? `ttft ${r.firstTokenMs}ms ` : "";
-    console.log(`${c.id.padEnd(7)} ${t}total ${r.totalMs ?? "-"}ms ${r.toolsUsed ? "TOOLS! " : ""}${r.parsed ? "" : `FAIL(${r.error}) `}| ${r.translation ?? r.raw ?? ""}`);
+    results.push(await runCase(provider, c));
   }
   await provider.stop();
 
-  const ok = results.filter((r) => r.totalMs != null);
+  const timed = results.filter((r) => r.totalMs != null);
   const summary = {
-    provider: provider.label,
+    provider: label,
     n: results.length,
     parsedOk: results.filter((r) => r.parsed).length,
+    validOk: results.filter((r) => r.parsed && !r.invalid).length,
     toolsUsed: results.filter((r) => r.toolsUsed).length,
-    totalMs: stats(ok.map((r) => r.totalMs)),
-    firstTokenMs: stats(ok.map((r) => r.firstTokenMs).filter((v) => v != null)),
+    totalMs: stats(timed.map((r) => r.totalMs)),
+    firstTokenMs: stats(timed.map((r) => r.firstTokenMs).filter((v) => v != null)),
   };
   console.log("summary:", JSON.stringify(summary));
   const outDir = path.join(here, "out");
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, `${provider.label.replaceAll(/[\\/:]/g, "_")}.json`), JSON.stringify({ summary, startInfo, results }, null, 2));
+  writeFileSync(path.join(outDir, `${label.replaceAll(/[\\/:#]/g, "_")}.json`), JSON.stringify({ summary, startInfo, results }, null, 2));
 }
 
-function round(o) {
-  return { ...o, raw: o.raw, totalMs: Math.round(o.totalMs), firstTokenMs: o.firstTokenMs == null ? null : Math.round(o.firstTokenMs), sessionMs: o.sessionMs == null ? undefined : Math.round(o.sessionMs) };
+async function runCase(provider, c) {
+  let r;
+  try {
+    const out = await provider.translate(c);
+    const parsed = parseOutput(out.raw);
+    r = {
+      id: c.id,
+      totalMs: Math.round(out.totalMs),
+      firstTokenMs: out.firstTokenMs == null ? null : Math.round(out.firstTokenMs),
+      toolsUsed: out.toolsUsed,
+      tokens: out.tokens,
+      parsed: parsed.ok,
+      error: parsed.ok ? undefined : parsed.error,
+      translation: parsed.value?.translation,
+      back: parsed.value?.back_translation,
+      invalid: parsed.ok ? validateTranslation(c, parsed.value.translation) ?? undefined : undefined,
+      raw: parsed.ok ? undefined : out.raw,
+    };
+  } catch (e) {
+    r = { id: c.id, parsed: false, error: e.message };
+  }
+  const t = r.firstTokenMs != null ? `ttft ${r.firstTokenMs}ms ` : "";
+  const flags = `${r.toolsUsed ? "TOOLS! " : ""}${r.parsed ? "" : `FAIL(${r.error}) `}${r.invalid ? `INVALID(${r.invalid}) ` : ""}`;
+  console.log(`${c.id.padEnd(7)} ${t}total ${r.totalMs ?? "-"}ms ${flags}| ${r.translation ?? r.raw ?? ""}`);
+  return r;
 }
 
 function stats(values) {

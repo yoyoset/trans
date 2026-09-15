@@ -2,11 +2,9 @@
 // conversation context leaks between cases; the system prompt is set once via CLI flag.
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { SYSTEM_PROMPT, userMessage } from "../prompt.mjs";
-
 const PI_CLI = path.join(process.env.APPDATA, "npm", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
 
-export function createPiProvider({ model, cwd, label = `pi-rpc-${model}` }) {
+export function createPiProvider({ prompt, model, cwd, label = `pi-rpc-${model}` }) {
   let child;
   let pending = null; // { resolve, reject, started, firstTokenMs, text, toolsUsed }
   const waiters = new Map(); // response id -> resolve
@@ -54,7 +52,7 @@ export function createPiProvider({ model, cwd, label = `pi-rpc-${model}` }) {
       const args = [
         PI_CLI, "--mode", "rpc", "--no-session", "--no-tools", "--no-extensions", "--no-skills",
         "--no-prompt-templates", "--no-context-files", "--offline", "--thinking", "off",
-        "--model", model, "--system-prompt", SYSTEM_PROMPT,
+        "--model", model, "--system-prompt", prompt.system,
       ];
       child = spawn(process.execPath, args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
       child.stderr.on("data", (d) => process.stderr.write(`[pi] ${d}`));
@@ -73,7 +71,7 @@ export function createPiProvider({ model, cwd, label = `pi-rpc-${model}` }) {
       await request({ type: "new_session" });
       return new Promise((resolve, reject) => {
         pending = { resolve, reject, started: performance.now(), firstTokenMs: null, text: "", toolsUsed: false };
-        send({ type: "prompt", message: userMessage(c) });
+        send({ type: "prompt", message: prompt.user(c) });
       });
     },
   };

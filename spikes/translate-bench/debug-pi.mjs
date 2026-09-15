@@ -1,13 +1,14 @@
 // Debug helper: send one case through pi RPC and dump every raw event (truncated) to see why output stops.
-// Usage: node debug-pi.mjs <provider/model> [caseId]
+// Usage: node debug-pi.mjs <provider/model> [caseId] [promptVersion]
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { SYSTEM_PROMPT, userMessage } from "./prompt.mjs";
+import { PROMPTS } from "./prompt.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const [model = "local-llama/qwen3-4b", caseId = "in-01"] = process.argv.slice(2);
+const [model = "local-llama/qwen3-4b", caseId = "in-01", promptVersion = "v1"] = process.argv.slice(2);
+const { system: SYSTEM_PROMPT, user: userMessage } = PROMPTS[promptVersion];
 const c = JSON.parse(readFileSync(path.join(here, "cases.json"), "utf8")).cases.find((x) => x.id === caseId);
 const cli = path.join(process.env.APPDATA, "npm", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
 

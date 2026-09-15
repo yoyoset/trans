@@ -1,7 +1,6 @@
 // llama-server (OpenAI-compatible) with SSE streaming, so time-to-first-token is measurable.
-import { SYSTEM_PROMPT, userMessage } from "../prompt.mjs";
-
-export function createLlamaProvider({ baseUrl = "http://127.0.0.1:8765", label = "llama-cpu-qwen3-4b" } = {}) {
+// temperature 0 by default: benchmark runs must be reproducible (v1 gave different in-06 output across runs at 0.2).
+export function createLlamaProvider({ prompt, baseUrl = "http://127.0.0.1:8765", label = "llama-cpu-qwen3-4b", temperature = 0 }) {
   return {
     label,
     async start() {},
@@ -13,11 +12,11 @@ export function createLlamaProvider({ baseUrl = "http://127.0.0.1:8765", label =
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           stream: true,
-          temperature: 0.2,
+          temperature,
           max_tokens: 256,
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: userMessage(c) },
+            { role: "system", content: prompt.system },
+            { role: "user", content: prompt.user(c) },
           ],
         }),
       });
