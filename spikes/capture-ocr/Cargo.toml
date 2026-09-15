@@ -1,0 +1,19 @@
+[package]
+name = "spike-capture-ocr"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "M0 验证：Windows.Graphics.Capture 按窗口截图 + Windows.Media.Ocr 识别率。一次性验证代码，不进产品。"
+
+[dependencies]
+windows-capture = "2.0.1"
+windows = { version = "0.62", features = [
+    "Globalization",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Storage_Streams",
+] }
+windows-future = "0.3"
+windows-collections = "0.3"
+image = { version = "0.25", default-features = false, features = ["png"] }
+anyhow = "1"
