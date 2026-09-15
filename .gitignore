@@ -1,0 +1,9 @@
+/target/
+**/target/
+node_modules/
+dist/
+*.log
+.env
+.env.*
+# spike 输出的截图/OCR 结果可能含聊天内容，不入库
+spikes/**/out/
