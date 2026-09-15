@@ -29,7 +29,10 @@ export function ComposerPanel() {
     return () => clearTimeout(timer);
   }, [draftText, translateDraft]);
 
-  useEffect(() => listEnd.current?.scrollIntoView({ behavior: "smooth" }), [entries.length]);
+  // 必须用花括号：WebView2 的 scrollIntoView 返回 Promise，直接作为 effect 返回值会让 React 当成清理函数调用而崩溃。
+  useEffect(() => {
+    listEnd.current?.scrollIntoView({ behavior: "smooth" });
+  }, [entries.length]);
 
   const submitIncoming = () => {
     void addIncoming(incoming);

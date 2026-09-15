@@ -7,6 +7,7 @@ import { ComposerPanel } from "./features/composer/ComposerPanel";
 import { EngineStatusBar } from "./features/engines/EngineStatusBar";
 import { SettingsPanel } from "./features/settings/SettingsPanel";
 import { useSettingsStore } from "./features/settings/useSettingsStore";
+import { ErrorBoundary } from "./shared/ui/ErrorBoundary";
 
 type Tab = "composer" | "settings";
 
@@ -52,7 +53,7 @@ export default function App() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto p-4">
-        {tab === "composer" ? <ComposerPanel /> : <SettingsPanel />}
+        <ErrorBoundary key={tab}>{tab === "composer" ? <ComposerPanel /> : <SettingsPanel />}</ErrorBoundary>
       </main>
     </div>
   );
