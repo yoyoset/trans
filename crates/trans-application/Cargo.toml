@@ -1,0 +1,20 @@
+[package]
+name = "trans-application"
+description = "应用层：端口（trait）定义、引擎路由、翻译/校对用例、设置模型。不依赖任何具体引擎或平台。"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+trans-domain = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[lints]
+workspace = true

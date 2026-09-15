@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "messenger-web",
+  "name": "Messenger 网页版",
+  "region": {
+    "left": { "value": 0.3, "unit": "width_ratio", "from": "start" },
+    "right": { "value": 0.02, "unit": "width_ratio", "from": "end" },
+    "top": { "value": 64, "unit": "px", "from": "start" },
+    "bottom": { "value": 90, "unit": "px", "from": "end" }
+  },
+  "input_point": {
+    "x": { "value": 0.6, "unit": "width_ratio", "from": "start" },
+    "y": { "value": 40, "unit": "px", "from": "end" }
+  },
+  "parser": { "kind": "bubble" },
+  "preprocess": { "scale": 1.0 },
+  "delivery": "click_paste",
+  "glossary": [
+    { "foreign": "lol", "user": "哈哈" },
+    { "foreign": "brb", "user": "马上回来" },
+    { "foreign": "btw", "user": "顺便说一下" }
+  ]
+}

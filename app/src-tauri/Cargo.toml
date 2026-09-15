@@ -1,0 +1,39 @@
+[package]
+name = "trans-app"
+description = "Tauri 桌面壳：组合根、命令转发、事件桥。不写业务逻辑。"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# `_lib` 后缀避免 Windows 上 lib 与 bin 同名冲突（cargo#8519）。
+name = "trans_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+trans-application = { workspace = true }
+trans-domain = { workspace = true }
+trans-presets = { workspace = true }
+trans-providers = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+tauri = { version = "2.10", features = [] }
+tauri-plugin-dialog = "2.2"
+tauri-plugin-single-instance = "2.2"
+
+[target.'cfg(windows)'.dependencies]
+trans-win = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

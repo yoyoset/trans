@@ -1,0 +1,16 @@
+[package]
+name = "trans-presets"
+description = "区域预设：框选区域、行解析方式、预处理、发送方式、术语表。场景差异是数据，不是代码。"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+trans-domain = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

@@ -2,6 +2,8 @@
 **/target/
 node_modules/
 dist/
+# Tauri 构建时生成的权限 schema
+app/src-tauri/gen/
 *.log
 .env
 .env.*

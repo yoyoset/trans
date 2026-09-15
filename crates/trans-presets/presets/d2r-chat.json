@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "d2r-chat",
+  "name": "暗黑破坏神 II：狱火重生 聊天框",
+  "match_process": "D2R.exe",
+  "region": {
+    "left": { "value": 0.02, "unit": "height_ratio", "from": "start" },
+    "right": { "value": 0.62, "unit": "height_ratio", "from": "start" },
+    "top": { "value": 0.36, "unit": "height_ratio", "from": "end" },
+    "bottom": { "value": 0.12, "unit": "height_ratio", "from": "end" }
+  },
+  "parser": { "kind": "prefix" },
+  "preprocess": { "scale": 2.0 },
+  "delivery": "copy_only",
+  "glossary": [
+    { "foreign": "WTS", "user": "出售" },
+    { "foreign": "WTB", "user": "收购" },
+    { "foreign": "WTT", "user": "交换" },
+    { "foreign": "pm", "user": "私聊" },
+    { "foreign": "gg", "user": "打得不错" },
+    { "foreign": "brb", "user": "马上回来" },
+    { "foreign": "Enigma", "user": "谜团" },
+    { "foreign": "Ber", "user": "Ber 符文" },
+    { "foreign": "baal run", "user": "刷巴尔" }
+  ]
+}

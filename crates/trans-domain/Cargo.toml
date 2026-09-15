@@ -1,0 +1,15 @@
+[package]
+name = "trans-domain"
+description = "纯领域逻辑：语言方向、提示词、译文校验、OCR 文本规范化、区域锚点。无 IO、无 async、无平台依赖。"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

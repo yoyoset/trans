@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-zinc-950 font-sans text-sm text-zinc-100 antialiased;
+}
+
+.input {
+  @apply w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-zinc-100 placeholder:text-zinc-500
+    focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50;
+}

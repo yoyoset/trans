@@ -282,5 +282,40 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 - 模拟输入可能被游戏反作弊判定为自动化 → 游戏默认只复制，不自动发送。
 - 本地模型的许可证各不相同（例如 Gemma 有单独的使用条款）→ 软件不打包模型，引导用户从官方来源下载。
 - 网页布局改版导致气泡规则失效 → 用户重新框选，或调整预设参数即可，不需要改代码。
+
+---
+
+## 13. 当前实现状态（M1 骨架，2026-09-15）
+
+### 已落地
+
+| crate / 目录 | 内容 |
+|---|---|
+| `crates/trans-domain` | 语言与方向、术语表按原文匹配、提示词模板（translate-v4 / calibrate-v1）、模型输出解析、译文机械校验、OCR 中文空格规范化、框选区域锚点解析与反算 |
+| `crates/trans-application` | 端口（`ChatEngine` / `SecretStore` / `WindowCapture` / `OcrEngine`）、按"方向 + 用途"路由引擎、翻译与在线校对用例（上下文按设置截取轮数）、带 schema 版本的设置模型 |
+| `crates/trans-providers` | OpenAI 兼容客户端（本地 llama-server 与在线 DeepSeek 共用）、llama-server 进程管理（纯 CPU、健康检查）、`HF_HOME` 本地模型发现 |
+| `crates/trans-presets` | 区域预设 schema 与校验；内置 Messenger 网页版、暗黑2 聊天框 |
+| `crates/trans-win` | Windows.Graphics.Capture 截图、Windows OCR、凭据管理器 |
+| `app/src-tauri` | 组合根、命令、引擎生命周期（配置未变不重启、切换串行化、状态事件推送）、设置文件原子写入与损坏备份 |
+| `app/src` | 翻译面板（对方消息 / 我的回复 / 在线校对 / 校验提示）、设置面板（本地模型、在线引擎、按方向偏好、校对上下文轮数） |
+
+**换模型不改代码**：本地模型 = 设置里的 GGUF 路径（自动列出 `HF_HOME` 里的模型）；在线模型 = 接口地址 + 模型名 + API Key。
+
+**真机冒烟实测**（`local_engine_smoke`，subgen 自带的 llama-server b10079 + Qwen3-4B Q4，16 线程，暗黑2 未运行）：
+- llama-server 启动到健康检查通过：5729 ms。
+- 不预热时，启动后第一句翻译 6179 ms，之后两句各约 1.9 s。多出来的时间花在固定系统提示词的预填充上。
+- 因此引擎管理器新启动 llama-server 后，会先调用 `warm_up_local`（只生成 1 个 token），完成后才发布"就绪"。加上预热后复测：预热耗时 4101 ms，启动后第一句降到 2494 ms（原来是 6179 ms），后面两句分别是 1826 ms 和 1884 ms。
+- 三句译文均正确，没有被校验标记。包括 M0-02 v4 译出方向歧义的那句："我用 2 个 Ber 换你的谜团可以吗？" → "Can I trade you 2 Ber for your Enigma?"。样本只有 3 句，不能据此认为歧义问题已经解决。
+- 真实凭据管理器读写测试通过。
+
+### 已知问题（显式列出，暂不处理）
+
+1. **llama-server 未绑定 Job Object**：应用被强杀时子进程可能残留；正常退出会回收。
+2. **llama-server 输出被丢弃**：启动失败只能看到退出码。应接入日志文件。
+3. **截图每次新建会话**：M0-01 实测首帧 594 ms，持续识别前必须改为常驻会话。
+4. **在线默认模型名 `deepseek-v4-flash` 未经官方 API 实测**：取自 opencode 的模型目录，额度恢复后需验证。
+5. **API Key 在内存中未清零**。
+6. **尚未实现**：框选界面、截图 → OCR → 行解析 → Reconciler 的识别管道、发送管道（SendJob 状态机）、贴靠目标窗口、日志落盘、自动更新。
+7. **前端没有自动化测试**；业务规则都在 Rust 侧并有单元测试，前端目前只有类型检查。
 - CLI Agent 包装层的延迟可能不满足"边打边出" → 靠 Draft/Final 分层 + 本地模型兜底。
 - 全屏独占游戏下无法停靠面板、截屏不可靠 → 降级为热键呼出 + CopyOnly。
