@@ -1,0 +1,13 @@
+{
+  "providers": {
+    "local-llama": {
+      "baseUrl": "http://127.0.0.1:8765/v1",
+      "api": "openai-completions",
+      "apiKey": "none",
+      "compat": { "supportsDeveloperRole": false, "supportsReasoningEffort": false },
+      "models": [
+        { "id": "qwen3-4b", "name": "Qwen3 4B CPU (bench)", "reasoning": false, "input": ["text"] }
+      ]
+    }
+  }
+}
