@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use trans_domain::chat_lines::LineParser;
 use trans_domain::glossary::GlossaryEntry;
 use trans_domain::region::{AnchoredPoint, AnchoredRegion};
 
@@ -25,18 +26,6 @@ pub struct RegionPreset {
     pub delivery: Delivery,
     #[serde(default)]
     pub glossary: Vec<GlossaryEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum LineParser {
-    /// 网页聊天：按气泡在左还是在右判断说话人。
-    Bubble,
-    /// 游戏聊天：解析 `[频道] 名字: 内容`；名字等于 `self_name` 的是用户自己。
-    Prefix {
-        #[serde(default)]
-        self_name: Option<String>,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

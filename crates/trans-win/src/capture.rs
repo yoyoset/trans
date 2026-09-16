@@ -95,7 +95,7 @@ impl GraphicsCaptureApiHandler for OneShot {
         let (width, height) = (buffer.width(), buffer.height());
         let mut scratch = Vec::new();
         let bgra = buffer.as_nopadding_buffer(&mut scratch).to_vec();
-        *self.slot.lock().unwrap_or_else(PoisonError::into_inner) = Some(Frame { width, height, bgra });
+        *self.slot.lock().unwrap_or_else(PoisonError::into_inner) = Some(Frame::new(width, height, bgra)?);
         control.stop();
         Ok(())
     }

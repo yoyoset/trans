@@ -1,9 +1,11 @@
-//! 截图与 OCR 的端口。都是阻塞调用，调用方负责放到阻塞线程池。
+//! 截图与 OCR 的端口。两者都是阻塞调用，调用方负责放到阻塞线程池里执行。
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use trans_domain::geometry::Rect;
 use trans_domain::lang::Lang;
+
+pub use trans_domain::chat_lines::OcrLine;
+pub use trans_domain::frame::{Frame, FrameError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -14,25 +16,6 @@ pub struct WindowInfo {
     pub id: WindowId,
     pub title: String,
     pub process_name: String,
-}
-
-/// 连续 BGRA8 像素，无行填充。
-pub struct Frame {
-    pub width: u32,
-    pub height: u32,
-    pub bgra: Vec<u8>,
-}
-
-impl std::fmt::Debug for Frame {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Frame").field("width", &self.width).field("height", &self.height).finish_non_exhaustive()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct OcrLine {
-    pub text: String,
-    pub bounds: Rect,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

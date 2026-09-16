@@ -1,7 +1,7 @@
 export const zh = {
   app: {
     title: "Trans 聊天翻译",
-    tabs: { composer: "翻译", settings: "设置" },
+    tabs: { composer: "翻译", capture: "窗口识别", settings: "设置" },
   },
   engine: {
     local: "本地",
@@ -35,6 +35,28 @@ export const zh = {
     fellBack: "偏好的引擎不可用，已改用另一个",
     elapsed: "{{ms}} ms",
     showDetail: "技术详情",
+  },
+  capture: {
+    title: "识别来源",
+    unsupported: "当前平台不支持窗口识别（只有 Windows 有截图和 OCR 适配器）。",
+    window: "目标窗口",
+    windowHint: "选聊天软件或游戏的窗口；最小化的窗口抓不到画面",
+    pickWindow: "请选择窗口",
+    refresh: "刷新列表",
+    presetInUse: "使用翻译页选择的术语场景：{{preset}}",
+    presetMissing: "还没选术语场景，请先到翻译页选一个（它同时决定识别区域和解析方式）",
+    preview: "预览识别效果",
+    start: "开始识别",
+    stop: "停止识别",
+    status: "识别状态",
+    idle: "未在识别",
+    runningOn: "正在识别：{{window}}（{{preset}}）",
+    lastSeen: "最近一次识别到 {{count}} 条消息",
+    lastError: "最近一次出错：{{error}}",
+    messagesGoToComposer: "对方的新消息会自动翻译，并出现在「翻译」页",
+    previewTitle: "预览结果",
+    previewRegion: "识别区域：x={{x}} y={{y}} {{width}}x{{height}}",
+    previewEmpty: "这块区域没识别到文字。检查窗口是否被最小化，或换一个术语场景（不同场景的框选位置不同）。",
   },
   issues: {
     title: "请核对",

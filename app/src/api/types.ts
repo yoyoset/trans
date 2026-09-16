@@ -114,3 +114,48 @@ export interface CommandErrorPayload {
   message: string;
   detail?: string;
 }
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface WindowInfo {
+  id: number;
+  title: string;
+  process_name: string;
+}
+
+export interface ParsedMessage {
+  speaker: Speaker;
+  sender: string | null;
+  text: string;
+}
+
+export interface CaptureInfo {
+  window: number;
+  window_title: string;
+  preset_id: string;
+  preset_name: string;
+}
+
+export interface CaptureStatus {
+  running: CaptureInfo | null;
+  last_error: string | null;
+  last_seen: number;
+}
+
+export interface CapturePreview {
+  region: Rect;
+  messages: ParsedMessage[];
+}
+
+/** 识别到并翻译好的一条消息；翻译失败时 translation 为空、error 有值。 */
+export interface CapturedMessage {
+  source: string;
+  sender: string | null;
+  translation: TranslationOutcome | null;
+  error: CommandErrorPayload | null;
+}

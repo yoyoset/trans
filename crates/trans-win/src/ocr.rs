@@ -49,20 +49,20 @@ fn installed_language(lang: &Lang) -> Result<Language, OcrError> {
 }
 
 fn to_software_bitmap(frame: &Frame) -> Result<SoftwareBitmap, OcrError> {
-    let expected = frame.width as usize * frame.height as usize * 4;
-    if frame.bgra.len() != expected {
+    let expected = frame.width() as usize * frame.height() as usize * 4;
+    if frame.bgra().len() != expected {
         return Err(OcrError::Backend(format!(
             "像素缓冲长度 {} 与尺寸 {}x{} 不符",
-            frame.bgra.len(),
-            frame.width,
-            frame.height
+            frame.bgra().len(),
+            frame.width(),
+            frame.height()
         )));
     }
     let writer = DataWriter::new().map_err(backend)?;
-    writer.WriteBytes(&frame.bgra).map_err(backend)?;
+    writer.WriteBytes(frame.bgra()).map_err(backend)?;
     let buffer = writer.DetachBuffer().map_err(backend)?;
-    let width = i32::try_from(frame.width).map_err(|_| OcrError::Backend("图像过宽".into()))?;
-    let height = i32::try_from(frame.height).map_err(|_| OcrError::Backend("图像过高".into()))?;
+    let width = i32::try_from(frame.width()).map_err(|_| OcrError::Backend("图像过宽".into()))?;
+    let height = i32::try_from(frame.height()).map_err(|_| OcrError::Backend("图像过高".into()))?;
     SoftwareBitmap::CreateCopyFromBuffer(&buffer, BitmapPixelFormat::Bgra8, width, height).map_err(backend)
 }
 

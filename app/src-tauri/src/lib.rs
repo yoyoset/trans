@@ -1,5 +1,6 @@
 //! Tauri 壳。职责只有两件：组装依赖（组合根）、把前端命令转发给应用层。业务逻辑都在 `crates/` 里。
 
+mod capture_session;
 mod commands;
 mod engines;
 mod error;
@@ -37,6 +38,12 @@ pub fn run() {
             commands::engines::discover_local_models,
             commands::engines::take_startup_warnings,
             commands::presets::list_presets,
+            commands::capture::capture_supported,
+            commands::capture::capture_status,
+            commands::capture::list_capture_windows,
+            commands::capture::preview_capture,
+            commands::capture::start_capture,
+            commands::capture::stop_capture,
             commands::translate::translate_text,
             commands::translate::calibrate_translation,
         ])

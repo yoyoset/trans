@@ -10,6 +10,7 @@ use trans_application::service::{ServiceConfig, TranslationService};
 use trans_application::settings::AppSettings;
 use trans_presets::RegionPreset;
 
+use crate::capture_session::CaptureSession;
 use crate::engines::EngineManager;
 use crate::settings_store::SettingsStore;
 
@@ -22,6 +23,7 @@ pub struct AppState {
     pub secrets: Arc<dyn SecretStore>,
     pub service: Arc<TranslationService>,
     pub engines: EngineManager,
+    pub capture: CaptureSession,
     pub presets: Vec<RegionPreset>,
     pub startup_warnings: Mutex<Vec<String>>,
 }
@@ -49,6 +51,7 @@ impl AppState {
             secrets: platform_secret_store(),
             service,
             engines: EngineManager::new(app.clone()),
+            capture: CaptureSession::new(app.clone(), capture_pipeline()),
             presets: trans_presets::builtin_presets()?,
             startup_warnings: Mutex::new(warnings),
         })
@@ -64,6 +67,20 @@ pub fn spawn_apply_engines(app: AppHandle) {
         let settings = state.settings.read().await.clone();
         state.engines.apply(&settings, state.secrets.as_ref(), &state.service).await;
     });
+}
+
+/// 截图和 OCR 只有 Windows 适配器；其他平台上窗口识别不可用，但翻译照常工作。
+#[cfg(windows)]
+fn capture_pipeline() -> Option<Arc<trans_application::capture_pipeline::CapturePipeline>> {
+    Some(Arc::new(trans_application::capture_pipeline::CapturePipeline::new(
+        Arc::new(trans_win::GraphicsCapture),
+        Arc::new(trans_win::WindowsOcr),
+    )))
+}
+
+#[cfg(not(windows))]
+fn capture_pipeline() -> Option<Arc<trans_application::capture_pipeline::CapturePipeline>> {
+    None
 }
 
 #[cfg(windows)]

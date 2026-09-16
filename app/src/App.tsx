@@ -3,19 +3,22 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { takeStartupWarnings } from "./api/engines";
+import { CapturePanel } from "./features/capture/CapturePanel";
 import { ComposerPanel } from "./features/composer/ComposerPanel";
+import { useCaptureStore } from "./features/capture/useCaptureStore";
 import { EngineStatusBar } from "./features/engines/EngineStatusBar";
 import { SettingsPanel } from "./features/settings/SettingsPanel";
 import { useSettingsStore } from "./features/settings/useSettingsStore";
 import { ErrorBoundary } from "./shared/ui/ErrorBoundary";
 
-type Tab = "composer" | "settings";
+type Tab = "composer" | "capture" | "settings";
 
 export default function App() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("composer");
   const [warnings, setWarnings] = useState<string[]>([]);
   const loadSettings = useSettingsStore((s) => s.load);
+  const subscribeCapture = useCaptureStore((s) => s.subscribe);
 
   useEffect(() => {
     void loadSettings();
@@ -24,13 +27,16 @@ export default function App() {
       .catch((error) => console.error("take_startup_warnings failed", error));
   }, [loadSettings]);
 
+  // 在最外层订阅：识别到的消息无论当前在哪个页面都要进入翻译列表。
+  useEffect(() => subscribeCapture(), [subscribeCapture]);
+
   return (
     <div className="flex h-full flex-col">
       <header className="space-y-2 border-b border-zinc-800 px-4 pb-2 pt-3">
         <div className="flex items-center justify-between">
           <h1 className="text-base font-semibold">{t("app.title")}</h1>
           <nav className="flex gap-1">
-            {(["composer", "settings"] as const).map((name) => (
+            {(["composer", "capture", "settings"] as const).map((name) => (
               <button
                 key={name}
                 onClick={() => setTab(name)}
@@ -53,7 +59,11 @@ export default function App() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto p-4">
-        <ErrorBoundary key={tab}>{tab === "composer" ? <ComposerPanel /> : <SettingsPanel />}</ErrorBoundary>
+        <ErrorBoundary key={tab}>
+          {tab === "composer" && <ComposerPanel />}
+          {tab === "capture" && <CapturePanel />}
+          {tab === "settings" && <SettingsPanel />}
+        </ErrorBoundary>
       </main>
     </div>
   );
