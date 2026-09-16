@@ -2,20 +2,27 @@ import { create } from "zustand";
 
 import {
   captureSupported,
+  closeLens,
   getCaptureStatus,
   listCaptureWindows,
   onCapturedMessage,
   onCaptureStatus,
+  openLens,
   previewCapture,
   startCapture,
   stopCapture,
+  type CaptureSourceArgs,
 } from "../../api/capture";
 import { AppError, toAppError } from "../../api/client";
 import type { CapturePreview, CaptureStatus, WindowInfo } from "../../api/types";
 import { useConversationStore } from "../composer/useConversationStore";
 
+/** 取景框：拖到哪识别哪。跟随窗口：区域按预设随窗口尺寸换算，窗口移动也不用重框。 */
+export type CaptureMode = "lens" | "window";
+
 interface CaptureState {
   supported: boolean;
+  mode: CaptureMode;
   status: CaptureStatus | null;
   windows: WindowInfo[];
   selectedWindow: number | null;
@@ -24,10 +31,14 @@ interface CaptureState {
   error: AppError | null;
   /** 订阅后端推送；返回取消订阅函数。识别到的消息直接进入翻译列表。 */
   subscribe: () => () => void;
+  setMode: (mode: CaptureMode) => void;
   refreshWindows: () => Promise<void>;
   selectWindow: (window: number | null) => void;
-  runPreview: () => Promise<void>;
-  start: () => Promise<void>;
+  showLens: () => Promise<void>;
+  hideLens: () => Promise<void>;
+  /** 跟随窗口模式的预览与启动；取景框模式在取景框窗口自己的工具条上操作。 */
+  previewWindow: () => Promise<void>;
+  startWindow: () => Promise<void>;
   stop: () => Promise<void>;
 }
 
@@ -43,16 +54,17 @@ export const useCaptureStore = create<CaptureState>((set, get) => {
     }
   };
 
-  const target = () => {
+  const windowSource = (): { source: CaptureSourceArgs; presetId: string } => {
     const window = get().selectedWindow;
     const presetId = useConversationStore.getState().presetId;
     if (window === null) throw new AppError({ code: "no_window", message: "请先选择要识别的窗口" });
     if (!presetId) throw new AppError({ code: "no_preset", message: "请先在翻译页选择术语场景" });
-    return { window, presetId };
+    return { source: { mode: "window", window }, presetId };
   };
 
   return {
     supported: false,
+    mode: "lens",
     status: null,
     windows: [],
     selectedWindow: null,
@@ -83,20 +95,26 @@ export const useCaptureStore = create<CaptureState>((set, get) => {
       };
     },
 
+    setMode: (mode) => set({ mode, preview: null, error: null }),
+
     refreshWindows: () => run(async () => set({ windows: await listCaptureWindows() })),
 
     selectWindow: (selectedWindow) => set({ selectedWindow, preview: null }),
 
-    runPreview: () =>
+    showLens: () => run(openLens),
+
+    hideLens: () => run(closeLens),
+
+    previewWindow: () =>
       run(async () => {
-        const { window, presetId } = target();
-        set({ preview: await previewCapture(window, presetId) });
+        const { source, presetId } = windowSource();
+        set({ preview: await previewCapture(source, presetId) });
       }),
 
-    start: () =>
+    startWindow: () =>
       run(async () => {
-        const { window, presetId } = target();
-        set({ status: await startCapture(window, presetId) });
+        const { source, presetId } = windowSource();
+        set({ status: await startCapture(source, presetId) });
       }),
 
     stop: () => run(async () => set({ status: await stopCapture() })),

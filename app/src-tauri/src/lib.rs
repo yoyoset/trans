@@ -39,6 +39,8 @@ pub fn run() {
             commands::engines::take_startup_warnings,
             commands::presets::list_presets,
             commands::capture::capture_supported,
+            commands::capture::open_lens,
+            commands::capture::close_lens,
             commands::capture::capture_status,
             commands::capture::list_capture_windows,
             commands::capture::preview_capture,

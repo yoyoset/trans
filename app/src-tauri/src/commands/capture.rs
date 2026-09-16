@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use trans_application::capture::{WindowId, WindowInfo};
-use trans_application::capture_pipeline::CaptureTarget;
+use trans_application::capture_pipeline::{CaptureSource, CaptureTarget};
 use trans_domain::chat_lines::ParsedMessage;
 use trans_domain::geometry::Rect;
 use trans_domain::glossary::GlossaryEntry;
@@ -10,16 +10,27 @@ use crate::capture_session::{CaptureInfo, CaptureStatus};
 use crate::error::CommandError;
 use crate::state::AppState;
 
+/// 取景框窗口的 label，和 tauri.conf.json 里一致。
+const LENS_WINDOW: &str = "lens";
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum CaptureSourceArgs {
+    /// 取景框：屏幕绝对坐标，物理像素。
+    Lens { x: i32, y: i32, width: u32, height: u32 },
+    /// 跟随窗口：区域来自预设，随窗口尺寸换算。
+    Window { window: i64 },
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CaptureArgs {
-    /// 目标窗口句柄，来自 `list_capture_windows`。
-    pub window: i64,
+    pub source: CaptureSourceArgs,
     pub preset_id: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CapturePreview {
-    /// 实际裁剪的区域，界面可以显示出来让用户判断框选是否合理。
+    /// 实际识别的区域，界面可以显示出来让用户判断框选是否合理。
     pub region: Rect,
     pub messages: Vec<ParsedMessage>,
 }
@@ -34,14 +45,37 @@ pub fn capture_status(state: State<'_, AppState>) -> CaptureStatus {
     state.capture.status()
 }
 
+/// 打开取景框，并立刻把它排除出截图——它浮在内容上面，不排除就只会拍到自己。
+#[tauri::command]
+pub fn open_lens(app: AppHandle) -> Result<(), CommandError> {
+    let window =
+        app.get_webview_window(LENS_WINDOW).ok_or_else(|| CommandError::new("lens_missing", "取景框窗口不存在"))?;
+    #[cfg(windows)]
+    {
+        let hwnd = window.hwnd().map_err(CommandError::internal)?;
+        trans_win::exclude_from_capture(hwnd.0)
+            .map_err(|error| CommandError::new("lens_not_excluded", format!("无法把取景框排除出截图：{error}")))?;
+    }
+    window.show().map_err(CommandError::internal)?;
+    window.set_focus().map_err(CommandError::internal)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn close_lens(app: AppHandle) -> Result<(), CommandError> {
+    if let Some(window) = app.get_webview_window(LENS_WINDOW) {
+        window.hide().map_err(CommandError::internal)?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn list_capture_windows(state: State<'_, AppState>) -> Result<Vec<WindowInfo>, CommandError> {
     let pipeline = state.capture.pipeline()?;
-    let windows = tauri::async_runtime::spawn_blocking(move || pipeline.list_windows())
+    tauri::async_runtime::spawn_blocking(move || pipeline.list_windows())
         .await
         .map_err(CommandError::internal)?
-        .map_err(|error| CommandError::new("capture_failed", error.to_string()))?;
-    Ok(windows)
+        .map_err(|error| CommandError::new("capture_failed", error.to_string()))
 }
 
 /// 试识别一次，用来确认框选对没对准。不写入判重历史，预览多少次都不会让正式识别漏消息。
@@ -77,22 +111,22 @@ async fn build_target(
         .find(|preset| preset.id == request.preset_id)
         .ok_or_else(|| CommandError::new("preset_not_found", format!("找不到预设 {}", request.preset_id)))?;
 
-    let window = WindowId(request.window);
+    let (source, label) = match request.source {
+        CaptureSourceArgs::Lens { x, y, width, height } => {
+            let rect = Rect { x, y, width, height };
+            (CaptureSource::Screen { rect }, format!("取景框 {width}×{height}"))
+        }
+        CaptureSourceArgs::Window { window } => {
+            let window = WindowId(window);
+            let label = window_title(state, window).unwrap_or_else(|| "窗口".into());
+            (CaptureSource::Window { window, region: preset.region }, label)
+        }
+    };
+
     // OCR 语言用"对方的语言"：识别的是对方发来的消息。
     let lang = state.settings.read().await.languages.foreign.clone();
-    let target = CaptureTarget {
-        window,
-        region: preset.region,
-        parser: preset.parser.clone(),
-        scale: preset.preprocess.scale,
-        lang,
-    };
-    let info = CaptureInfo {
-        window,
-        window_title: window_title(state, window).unwrap_or_default(),
-        preset_id: preset.id.clone(),
-        preset_name: preset.name.clone(),
-    };
+    let target = CaptureTarget { source, parser: preset.parser.clone(), scale: preset.preprocess.scale, lang };
+    let info = CaptureInfo { label, preset_id: preset.id.clone(), preset_name: preset.name.clone() };
     Ok((target, info, preset.glossary.clone()))
 }
 

@@ -135,8 +135,8 @@ export interface ParsedMessage {
 }
 
 export interface CaptureInfo {
-  window: number;
-  window_title: string;
+  /** 取景框显示尺寸，跟随窗口显示窗口标题。 */
+  label: string;
   preset_id: string;
   preset_name: string;
 }

@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,19 +7,19 @@ import { ErrorNotice } from "../../shared/ui/ErrorNotice";
 import { Field } from "../../shared/ui/Field";
 import { Section } from "../../shared/ui/Section";
 import { useConversationStore } from "../composer/useConversationStore";
-import { useCaptureStore } from "./useCaptureStore";
+import { useCaptureStore, type CaptureMode } from "./useCaptureStore";
 
 export function CapturePanel() {
   const { t } = useTranslation();
   const capture = useCaptureStore();
   const presetId = useConversationStore((s) => s.presetId);
   const running = capture.status?.running ?? null;
+  const refreshWindows = capture.refreshWindows;
+  const mode = capture.mode;
 
   useEffect(() => {
-    void capture.refreshWindows();
-    // 只在进入本页时刷新一次窗口列表，避免下拉框在选择过程中被刷掉。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (mode === "window") void refreshWindows();
+  }, [mode, refreshWindows]);
 
   if (!capture.supported) {
     return <p className="text-zinc-400">{t("capture.unsupported")}</p>;
@@ -26,47 +27,70 @@ export function CapturePanel() {
 
   return (
     <div className="space-y-4">
-      <Section
-        title={t("capture.title")}
-        actions={
-          <Button onClick={() => void capture.refreshWindows()} disabled={capture.busy}>
-            {t("capture.refresh")}
-          </Button>
-        }
-      >
-        <Field label={t("capture.window")} hint={t("capture.windowHint")}>
-          <select
-            className="input"
-            value={capture.selectedWindow ?? ""}
-            onChange={(e) => capture.selectWindow(e.target.value === "" ? null : Number(e.target.value))}
-          >
-            <option value="">{t("capture.pickWindow")}</option>
-            {capture.windows.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.process_name} — {w.title}
-              </option>
-            ))}
-          </select>
-        </Field>
+      <Section title={t("capture.title")}>
+        <div className="flex gap-1">
+          {(["lens", "window"] as const).map((name) => (
+            <ModeButton key={name} mode={name} active={mode === name} onClick={() => capture.setMode(name)} />
+          ))}
+        </div>
 
         <p className="text-xs text-zinc-500">
           {presetId ? t("capture.presetInUse", { preset: presetId }) : t("capture.presetMissing")}
         </p>
 
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => void capture.runPreview()} disabled={capture.busy}>
-            {t("capture.preview")}
-          </Button>
-          {running ? (
-            <Button variant="danger" onClick={() => void capture.stop()} disabled={capture.busy}>
-              {t("capture.stop")}
-            </Button>
-          ) : (
-            <Button variant="primary" onClick={() => void capture.start()} disabled={capture.busy}>
-              {t("capture.start")}
-            </Button>
-          )}
-        </div>
+        {mode === "lens" ? (
+          <>
+            <p className="text-sm text-zinc-300">{t("capture.lensHowTo")}</p>
+            <p className="text-xs text-amber-300">{t("capture.lensClickWarning")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" onClick={() => void capture.showLens()} disabled={capture.busy}>
+                {t("capture.openLens")}
+              </Button>
+              <Button onClick={() => void capture.hideLens()} disabled={capture.busy}>
+                {t("capture.closeLens")}
+              </Button>
+              {running && (
+                <Button variant="danger" onClick={() => void capture.stop()} disabled={capture.busy}>
+                  {t("capture.stop")}
+                </Button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <Field label={t("capture.window")} hint={t("capture.windowHint")}>
+              <select
+                className="input"
+                value={capture.selectedWindow ?? ""}
+                onChange={(e) => capture.selectWindow(e.target.value === "" ? null : Number(e.target.value))}
+              >
+                <option value="">{t("capture.pickWindow")}</option>
+                {capture.windows.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.process_name} — {w.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void refreshWindows()} disabled={capture.busy}>
+                {t("capture.refresh")}
+              </Button>
+              <Button onClick={() => void capture.previewWindow()} disabled={capture.busy}>
+                {t("capture.preview")}
+              </Button>
+              {running ? (
+                <Button variant="danger" onClick={() => void capture.stop()} disabled={capture.busy}>
+                  {t("capture.stop")}
+                </Button>
+              ) : (
+                <Button variant="primary" onClick={() => void capture.startWindow()} disabled={capture.busy}>
+                  {t("capture.start")}
+                </Button>
+              )}
+            </div>
+          </>
+        )}
 
         {capture.error && <ErrorNotice error={capture.error} />}
       </Section>
@@ -75,7 +99,7 @@ export function CapturePanel() {
         <Section title={t("capture.status")}>
           <p className="text-sm text-zinc-300">
             {running
-              ? t("capture.runningOn", { window: running.window_title || running.window, preset: running.preset_name })
+              ? t("capture.runningOn", { target: running.label, preset: running.preset_name })
               : t("capture.idle")}
           </p>
           <p className="text-xs text-zinc-500">{t("capture.lastSeen", { count: capture.status.last_seen })}</p>
@@ -114,5 +138,21 @@ export function CapturePanel() {
         </Section>
       )}
     </div>
+  );
+}
+
+function ModeButton({ mode, active, onClick }: { mode: CaptureMode; active: boolean; onClick: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        "rounded-md px-3 py-1 text-sm",
+        active ? "bg-zinc-800 text-zinc-50" : "text-zinc-400 hover:text-zinc-200",
+      )}
+    >
+      {t(`capture.mode.${mode}`)}
+    </button>
   );
 }

@@ -2,6 +2,23 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "主窗口权限：只开放用到的能力。",
-  "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "windows": [
+    "main",
+    "lens"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-inner-size",
+    "core:window:allow-scale-factor",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position"
+  ]
 }

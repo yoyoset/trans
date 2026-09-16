@@ -19,6 +19,21 @@
         "minWidth": 380,
         "minHeight": 520,
         "resizable": true
+      },
+      {
+        "label": "lens",
+        "title": "取景框",
+        "width": 560,
+        "height": 320,
+        "minWidth": 180,
+        "minHeight": 120,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false
       }
     ],
     "security": {
@@ -27,7 +42,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -9,7 +9,7 @@ use serde::Serialize;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
-use trans_application::capture::{WindowId, WindowInfo};
+use trans_application::capture::WindowInfo;
 use trans_application::capture_pipeline::{CapturePipeline, CaptureTarget};
 use trans_application::service::{TranslateRequest, TranslationOutcome, TranslationService};
 use trans_domain::chat_lines::ParsedMessage;
@@ -28,8 +28,8 @@ const POLL_INTERVAL: Duration = Duration::from_millis(1200);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CaptureInfo {
-    pub window: WindowId,
-    pub window_title: String,
+    /// 界面上显示的目标名字：取景框显示尺寸，跟随窗口显示窗口标题。
+    pub label: String,
     pub preset_id: String,
     pub preset_name: String,
 }

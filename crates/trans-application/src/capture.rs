@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use trans_domain::geometry::Rect;
 use trans_domain::lang::Lang;
 
 pub use trans_domain::chat_lines::OcrLine;
@@ -39,6 +40,12 @@ pub enum OcrError {
 pub trait WindowCapture: Send + Sync {
     fn list_windows(&self) -> Result<Vec<WindowInfo>, CaptureError>;
     fn grab_frame(&self, window: WindowId) -> Result<Frame, CaptureError>;
+}
+
+/// 按屏幕绝对坐标截取一块区域，供"取景框"使用：用户把框拖到哪里就识别哪里，
+/// 不关心底下是哪个窗口。实现必须把本程序自己的窗口排除在外，否则只会拍到取景框自己。
+pub trait ScreenCapture: Send + Sync {
+    fn grab_region(&self, rect: Rect) -> Result<Frame, CaptureError>;
 }
 
 pub trait OcrEngine: Send + Sync {

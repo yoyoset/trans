@@ -6,6 +6,6 @@ mod capture;
 mod credential;
 mod ocr;
 
-pub use capture::GraphicsCapture;
+pub use capture::{exclude_from_capture, GraphicsCapture, MonitorCapture};
 pub use credential::CredentialStore;
 pub use ocr::WindowsOcr;
