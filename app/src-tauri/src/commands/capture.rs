@@ -57,6 +57,7 @@ pub fn open_lens(app: AppHandle) -> Result<(), CommandError> {
         trans_win::exclude_from_capture(hwnd.0)
             .map_err(|error| CommandError::new("lens_not_excluded", format!("无法把取景框排除出截图：{error}")))?;
     }
+    tracing::info!(capturing = state_is_running(&app), "lens opened");
     window.show().map_err(CommandError::internal)?;
     window.set_focus().map_err(CommandError::internal)?;
     Ok(())
@@ -65,6 +66,8 @@ pub fn open_lens(app: AppHandle) -> Result<(), CommandError> {
 #[tauri::command]
 pub fn close_lens(app: AppHandle) -> Result<(), CommandError> {
     if let Some(window) = app.get_webview_window(LENS_WINDOW) {
+        // 只隐藏窗口，识别照常在后台进行；重新打开时面板里会有隐藏期间识别到的消息。
+        tracing::info!(capturing = state_is_running(&app), "lens hidden");
         window.hide().map_err(CommandError::internal)?;
     }
     Ok(())
@@ -124,6 +127,10 @@ pub fn refresh_capture(state: State<'_, AppState>) -> Result<(), CommandError> {
 #[tauri::command]
 pub async fn stop_capture(state: State<'_, AppState>) -> Result<CaptureStatus, CommandError> {
     Ok(state.capture.stop().await)
+}
+
+fn state_is_running(app: &AppHandle) -> bool {
+    app.state::<AppState>().capture.status().running.is_some()
 }
 
 async fn build_target(state: &AppState, request: &CaptureArgs) -> Result<(CaptureTarget, CaptureInfo), CommandError> {

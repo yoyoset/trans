@@ -84,6 +84,7 @@ impl CaptureSession {
         // 换目标就清空判重历史，否则新位置上和之前相同的话会被当成重复丢掉。
         pipeline.reset();
 
+        tracing::info!(label = %info.label, preset = %info.preset_id, source = ?target.source, "capture started");
         *self.target.write().unwrap_or_else(PoisonError::into_inner) = Some(target);
         let (app, shared, refresh) = (self.app.clone(), self.target.clone(), self.refresh.clone());
         let handle = tauri::async_runtime::spawn(async move { run_loop(app, pipeline, shared, refresh).await });
@@ -102,7 +103,10 @@ impl CaptureSession {
         {
             let mut target = self.target.write().unwrap_or_else(PoisonError::into_inner);
             match target.as_mut().map(|t| &mut t.source) {
-                Some(CaptureSource::Screen { rect: current }) => *current = rect,
+                Some(CaptureSource::Screen { rect: current }) => {
+                    tracing::info!(from = ?*current, to = ?rect, "capture region updated");
+                    *current = rect;
+                }
                 Some(CaptureSource::Window { .. }) => {
                     return Err(CommandError::new("not_lens", "当前不是取景框模式，不能更新区域"));
                 }
@@ -119,6 +123,10 @@ impl CaptureSession {
 
     /// `None` 为手动模式：开始识别时读一次，之后只在用户点刷新时读。
     pub fn set_interval(&self, interval: Option<Duration>) {
+        tracing::info!(
+            interval_ms = interval.map(|d| d.as_millis() as u64),
+            "capture refresh interval set (none = manual)"
+        );
         self.refresh.set_interval(interval);
     }
 
@@ -126,12 +134,14 @@ impl CaptureSession {
         if self.status().running.is_none() {
             return Err(CommandError::new("not_running", "当前没有在识别"));
         }
+        tracing::info!("capture refresh requested");
         self.refresh.request_refresh();
         Ok(())
     }
 
     pub async fn stop(&self) -> CaptureStatus {
         if let Some(handle) = self.task.lock().await.take() {
+            tracing::info!("capture stopped");
             handle.abort();
         }
         if let Some(pipeline) = &self.pipeline {
@@ -190,17 +200,31 @@ async fn run_loop(
                 let theirs: Vec<ParsedMessage> =
                     outcome.fresh.into_iter().filter(|message| message.speaker == Speaker::Them).collect();
                 if !theirs.is_empty() {
+                    // 只记条数不记正文：日志文件不应留下聊天内容。
+                    tracing::info!(seen = outcome.all.len(), fresh = theirs.len(), "captured new messages");
+                }
+                if !theirs.is_empty() {
                     if let Err(error) = app.emit(CAPTURE_LINES_EVENT, theirs) {
                         tracing::warn!(%error, "failed to emit captured lines");
                     }
                 }
             }
-            Ok(Err(error)) => publish_status(&app, |status| status.last_error = Some(error.to_string())),
-            Err(error) => publish_status(&app, |status| status.last_error = Some(error.to_string())),
+            Ok(Err(error)) => report_round_error(&app, error.to_string()),
+            Err(error) => report_round_error(&app, error.to_string()),
         }
 
         refresh.wait_next_round(started).await;
     }
+}
+
+/// 同一个错误连续出现只记一次日志（例如窗口一直最小化），状态照常更新。
+fn report_round_error(app: &AppHandle, message: String) {
+    let repeated =
+        app.state::<crate::state::AppState>().capture.status().last_error.as_deref() == Some(message.as_str());
+    if !repeated {
+        tracing::warn!(error = %message, "capture round failed");
+    }
+    publish_status(app, |status| status.last_error = Some(message));
 }
 
 fn publish_status(app: &AppHandle, change: impl FnOnce(&mut CaptureStatus)) {

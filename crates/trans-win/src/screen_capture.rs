@@ -49,6 +49,7 @@ impl ScreenCapture for MonitorCapture {
             if let Some(old) = live.take() {
                 old.close();
             }
+            tracing::info!(region = ?key.region, "starting screen capture session");
             *live = Some(LiveSession::start(monitor, key)?);
         }
         let session = live.as_ref().expect("session was just ensured");
@@ -56,6 +57,7 @@ impl ScreenCapture for MonitorCapture {
             Ok(frame) => Ok(frame),
             Err(error) => {
                 // 会话已经不可用（显示器变了、区域越界等）：关掉，下一轮重建。
+                tracing::warn!(%error, "screen capture session unusable; it will be restarted");
                 if let Some(broken) = live.take() {
                     broken.close();
                 }
