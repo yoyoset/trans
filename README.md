@@ -58,4 +58,4 @@ cargo test -p trans-providers --test local_engine_smoke -- --ignored --nocapture
 
 ## 许可证
 
-MIT OR Apache-2.0，任选其一。
+MIT OR Apache-2.0，任选其一，全文见 [LICENSE-MIT](LICENSE-MIT) 与 [LICENSE-APACHE](LICENSE-APACHE)。
