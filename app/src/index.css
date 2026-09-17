@@ -14,3 +14,10 @@ body {
   @apply w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-zinc-100 placeholder:text-zinc-500
     focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50;
 }
+
+/* 取景框窗口：整页透明，取景区才能看到底下的内容。index.html 为防白屏给 html/body 设了深色背景，这里覆盖掉。 */
+html.lens,
+html.lens body,
+html.lens #root {
+  background: transparent !important;
+}

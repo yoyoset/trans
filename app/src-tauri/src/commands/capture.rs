@@ -4,7 +4,6 @@ use trans_application::capture::{WindowId, WindowInfo};
 use trans_application::capture_pipeline::{CaptureSource, CaptureTarget};
 use trans_domain::chat_lines::ParsedMessage;
 use trans_domain::geometry::Rect;
-use trans_domain::glossary::GlossaryEntry;
 
 use crate::capture_session::{CaptureInfo, CaptureStatus};
 use crate::error::CommandError;
@@ -81,7 +80,7 @@ pub async fn list_capture_windows(state: State<'_, AppState>) -> Result<Vec<Wind
 /// 试识别一次，用来确认框选对没对准。不写入判重历史，预览多少次都不会让正式识别漏消息。
 #[tauri::command]
 pub async fn preview_capture(request: CaptureArgs, state: State<'_, AppState>) -> Result<CapturePreview, CommandError> {
-    let (target, _, _) = build_target(&state, &request).await?;
+    let (target, _) = build_target(&state, &request).await?;
     let pipeline = state.capture.pipeline()?;
     let outcome = tauri::async_runtime::spawn_blocking(move || pipeline.preview(&target))
         .await
@@ -92,8 +91,8 @@ pub async fn preview_capture(request: CaptureArgs, state: State<'_, AppState>) -
 
 #[tauri::command]
 pub async fn start_capture(request: CaptureArgs, state: State<'_, AppState>) -> Result<CaptureStatus, CommandError> {
-    let (target, info, glossary) = build_target(&state, &request).await?;
-    state.capture.start(target, info, glossary, state.service.clone()).await
+    let (target, info) = build_target(&state, &request).await?;
+    state.capture.start(target, info).await
 }
 
 #[tauri::command]
@@ -101,10 +100,7 @@ pub async fn stop_capture(state: State<'_, AppState>) -> Result<CaptureStatus, C
     Ok(state.capture.stop().await)
 }
 
-async fn build_target(
-    state: &AppState,
-    request: &CaptureArgs,
-) -> Result<(CaptureTarget, CaptureInfo, Vec<GlossaryEntry>), CommandError> {
+async fn build_target(state: &AppState, request: &CaptureArgs) -> Result<(CaptureTarget, CaptureInfo), CommandError> {
     let preset = state
         .presets
         .iter()
@@ -127,7 +123,7 @@ async fn build_target(
     let lang = state.settings.read().await.languages.foreign.clone();
     let target = CaptureTarget { source, parser: preset.parser.clone(), scale: preset.preprocess.scale, lang };
     let info = CaptureInfo { label, preset_id: preset.id.clone(), preset_name: preset.name.clone() };
-    Ok((target, info, preset.glossary.clone()))
+    Ok((target, info))
 }
 
 fn window_title(state: &AppState, window: WindowId) -> Option<String> {

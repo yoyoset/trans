@@ -1,29 +1,27 @@
-//! 后台识别会话：定时抓取目标窗口 → 识别 → 把新出现的对方消息翻译后推给界面。
+//! 后台识别会话：定时抓取 → 识别 → 把新出现的对方消息推给取景框面板。
 //!
-//! 只在这里决定"多久抓一次"和"抓到之后做什么"；怎么抓、怎么解析在 `trans-application` 的读取管道里。
+//! 这里不翻译：用户在面板上点哪句才翻译哪句。一屏刚识别出十几句时，如果全部自动送去本地模型
+//! （每句约 1.9 s），会排很长的队，而用户往往只关心其中一两句。
+//! 怎么抓、怎么解析在 `trans-application` 的读取管道里；这里只决定"多久抓一次"和"抓到之后推给谁"。
 
 use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 use trans_application::capture::WindowInfo;
 use trans_application::capture_pipeline::{CapturePipeline, CaptureTarget};
-use trans_application::service::{TranslateRequest, TranslationOutcome, TranslationService};
 use trans_domain::chat_lines::ParsedMessage;
 use trans_domain::conversation::Speaker;
-use trans_domain::glossary::GlossaryEntry;
-use trans_domain::lang::{Direction, Tone};
 
 use crate::error::CommandError;
 
-pub const CAPTURE_MESSAGE_EVENT: &str = "capture-message";
+pub const CAPTURE_LINES_EVENT: &str = "capture-lines";
 pub const CAPTURE_STATUS_EVENT: &str = "capture-status";
 
-/// 抓取间隔。M0-01 实测单次识别 16～42 ms，间隔主要是为了不让 CPU 一直忙，
-/// 也给翻译留出时间（本地 4B 每句约 1.9 s）。
+/// 抓取间隔。M0-01 实测小区域 OCR 只要几十 ms，间隔主要是为了不让 CPU 一直忙。
 const POLL_INTERVAL: Duration = Duration::from_millis(1200);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -44,15 +42,6 @@ pub struct CaptureStatus {
     pub last_seen: usize,
 }
 
-/// 识别到并翻译好的一条消息；翻译失败时 `translation` 为空、`error` 有值。
-#[derive(Debug, Clone, Serialize)]
-pub struct CapturedMessage {
-    pub source: String,
-    pub sender: Option<String>,
-    pub translation: Option<TranslationOutcome>,
-    pub error: Option<CommandError>,
-}
-
 pub struct CaptureSession {
     app: AppHandle,
     pipeline: Option<Arc<CapturePipeline>>,
@@ -65,7 +54,7 @@ impl CaptureSession {
         Self { app, pipeline, task: Mutex::new(None), status: RwLock::new(CaptureStatus::default()) }
     }
 
-    /// 当前平台是否支持窗口识别（非 Windows 上没有截图和 OCR 适配器）。
+    /// 当前平台是否支持识别（非 Windows 上没有截图和 OCR 适配器）。
     pub fn is_supported(&self) -> bool {
         self.pipeline.is_some()
     }
@@ -78,22 +67,14 @@ impl CaptureSession {
         self.pipeline()?.list_windows().map_err(|error| CommandError::new("capture_failed", error.to_string()))
     }
 
-    pub async fn start(
-        &self,
-        target: CaptureTarget,
-        info: CaptureInfo,
-        glossary: Vec<GlossaryEntry>,
-        service: Arc<TranslationService>,
-    ) -> Result<CaptureStatus, CommandError> {
+    pub async fn start(&self, target: CaptureTarget, info: CaptureInfo) -> Result<CaptureStatus, CommandError> {
         let pipeline = self.pipeline()?;
         self.stop().await;
-        // 换目标就要清空判重历史，否则新会话里和上一个窗口相同的话会被当成重复丢掉。
+        // 换目标就清空判重历史，否则新位置上和之前相同的话会被当成重复丢掉。
         pipeline.reset();
 
         let app = self.app.clone();
-        let handle = tauri::async_runtime::spawn(async move {
-            run_loop(app, pipeline, target, glossary, service).await;
-        });
+        let handle = tauri::async_runtime::spawn(async move { run_loop(app, pipeline, target).await });
         *self.task.lock().await = Some(handle);
         self.update_status(|status| {
             status.running = Some(info);
@@ -112,7 +93,7 @@ impl CaptureSession {
     }
 
     pub fn pipeline(&self) -> Result<Arc<CapturePipeline>, CommandError> {
-        self.pipeline.clone().ok_or_else(|| CommandError::new("capture_unsupported", "当前平台不支持窗口识别"))
+        self.pipeline.clone().ok_or_else(|| CommandError::new("capture_unsupported", "当前平台不支持识别"))
     }
 
     fn update_status(&self, change: impl FnOnce(&mut CaptureStatus)) {
@@ -127,13 +108,7 @@ impl CaptureSession {
     }
 }
 
-async fn run_loop(
-    app: AppHandle,
-    pipeline: Arc<CapturePipeline>,
-    target: CaptureTarget,
-    glossary: Vec<GlossaryEntry>,
-    service: Arc<TranslationService>,
-) {
+async fn run_loop(app: AppHandle, pipeline: Arc<CapturePipeline>, target: CaptureTarget) {
     loop {
         let started = Instant::now();
         let poll = {
@@ -149,50 +124,23 @@ async fn run_loop(
                     status.last_error = None;
                     status.last_seen = outcome.all.len();
                 });
-                for message in outcome.fresh.into_iter().filter(|m| m.speaker == Speaker::Them) {
-                    translate_and_emit(&app, &service, &glossary, message).await;
+                let theirs: Vec<ParsedMessage> =
+                    outcome.fresh.into_iter().filter(|message| message.speaker == Speaker::Them).collect();
+                if !theirs.is_empty() {
+                    if let Err(error) = app.emit(CAPTURE_LINES_EVENT, theirs) {
+                        tracing::warn!(%error, "failed to emit captured lines");
+                    }
                 }
             }
             Ok(Err(error)) => publish_status(&app, |status| status.last_error = Some(error.to_string())),
             Err(error) => publish_status(&app, |status| status.last_error = Some(error.to_string())),
         }
 
-        // 间隔从"这一轮开始"算起：识别和翻译花掉的时间算在里面，不会越积越慢。
-        let elapsed = started.elapsed();
-        tokio::time::sleep(POLL_INTERVAL.saturating_sub(elapsed)).await;
-    }
-}
-
-async fn translate_and_emit(
-    app: &AppHandle,
-    service: &TranslationService,
-    glossary: &[GlossaryEntry],
-    message: ParsedMessage,
-) {
-    let request = TranslateRequest {
-        direction: Direction::Incoming,
-        text: message.text.clone(),
-        tone: Tone::Casual,
-        glossary: glossary.to_vec(),
-    };
-    let captured = match service.translate(request).await {
-        Ok(outcome) => {
-            CapturedMessage { source: message.text, sender: message.sender, translation: Some(outcome), error: None }
-        }
-        Err(error) => CapturedMessage {
-            source: message.text,
-            sender: message.sender,
-            translation: None,
-            error: Some(error.into()),
-        },
-    };
-    if let Err(error) = app.emit(CAPTURE_MESSAGE_EVENT, captured) {
-        tracing::warn!(%error, "failed to emit captured message");
+        // 间隔从"这一轮开始"算起：识别花掉的时间算在里面，不会越积越慢。
+        tokio::time::sleep(POLL_INTERVAL.saturating_sub(started.elapsed())).await;
     }
 }
 
 fn publish_status(app: &AppHandle, change: impl FnOnce(&mut CaptureStatus)) {
-    use tauri::Manager;
-    let session = app.state::<crate::state::AppState>();
-    session.capture.update_status(change);
+    app.state::<crate::state::AppState>().capture.update_status(change);
 }

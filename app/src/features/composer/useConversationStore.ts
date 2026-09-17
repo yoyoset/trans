@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import { AppError, toAppError } from "../../api/client";
 import { calibrateTranslation, translateText } from "../../api/translate";
-import type { CapturedMessage, Direction, TranslationOutcome, Turn } from "../../api/types";
+import type { Direction, TranslationOutcome, Turn } from "../../api/types";
 
 export interface Entry {
   id: string;
@@ -24,8 +24,6 @@ interface ConversationState {
   draft: Entry | null;
   setPresetId: (id: string | null) => void;
   addIncoming: (text: string) => Promise<void>;
-  /** 窗口识别推送过来的消息：已经在后端翻译好了，这里只负责显示。 */
-  addCaptured: (message: CapturedMessage) => void;
   translateDraft: (text: string) => Promise<void>;
   calibrate: (id: string) => Promise<void>;
   commitDraft: () => void;
@@ -75,17 +73,6 @@ export const useConversationStore = create<ConversationState>((set, get) => {
       } catch (error) {
         patch(entry.id, { error: toAppError(error), busy: null });
       }
-    },
-
-    addCaptured: (message) => {
-      const entry: Entry = {
-        ...newEntry("incoming", message.source),
-        sender: message.sender,
-        local: message.translation,
-        busy: null,
-        error: message.error ? new AppError(message.error) : null,
-      };
-      set((state) => ({ entries: [...state.entries, entry] }));
     },
 
     translateDraft: async (text) => {

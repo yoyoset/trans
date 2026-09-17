@@ -1,9 +1,9 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { call } from "./client";
-import type { CapturedMessage, CapturePreview, CaptureStatus, WindowInfo } from "./types";
+import type { CapturePreview, CaptureStatus, ParsedMessage, WindowInfo } from "./types";
 
-const CAPTURE_MESSAGE_EVENT = "capture-message";
+const CAPTURE_LINES_EVENT = "capture-lines";
 const CAPTURE_STATUS_EVENT = "capture-status";
 
 /** 识别哪块画面：取景框给屏幕绝对坐标，跟随窗口给窗口句柄。 */
@@ -25,8 +25,9 @@ export const startCapture = (source: CaptureSourceArgs, presetId: string) =>
 
 export const stopCapture = () => call<CaptureStatus>("stop_capture");
 
-export const onCapturedMessage = (handler: (message: CapturedMessage) => void): Promise<UnlistenFn> =>
-  listen<CapturedMessage>(CAPTURE_MESSAGE_EVENT, (event) => handler(event.payload));
+/** 新识别到的对方消息（还没翻译，用户点哪句翻哪句）。 */
+export const onCapturedLines = (handler: (lines: ParsedMessage[]) => void): Promise<UnlistenFn> =>
+  listen<ParsedMessage[]>(CAPTURE_LINES_EVENT, (event) => handler(event.payload));
 
 export const onCaptureStatus = (handler: (status: CaptureStatus) => void): Promise<UnlistenFn> =>
   listen<CaptureStatus>(CAPTURE_STATUS_EVENT, (event) => handler(event.payload));

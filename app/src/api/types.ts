@@ -151,11 +151,3 @@ export interface CapturePreview {
   region: Rect;
   messages: ParsedMessage[];
 }
-
-/** 识别到并翻译好的一条消息；翻译失败时 translation 为空、error 有值。 */
-export interface CapturedMessage {
-  source: string;
-  sender: string | null;
-  translation: TranslationOutcome | null;
-  error: CommandErrorPayload | null;
-}

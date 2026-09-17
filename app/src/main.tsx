@@ -3,7 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import App from "./App";
-import { LensWindow } from "./features/capture/LensWindow";
+import { LensWindow } from "./features/lens/LensWindow";
 import "./i18n";
 import "./index.css";
 
@@ -17,6 +17,7 @@ function currentLabel(): string {
 }
 
 const label = currentLabel();
+if (label === "lens") document.documentElement.classList.add("lens");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>{label === "lens" ? <LensWindow /> : <App />}</React.StrictMode>,
