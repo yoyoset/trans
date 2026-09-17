@@ -44,6 +44,13 @@ export const zh = {
     openLens: "打开取景框",
     closeLens: "关闭取景框",
   },
+  bubble: {
+    hint: "点击开关取景框，拖动可移动，右键更多",
+    capturing: "识别中",
+    idle: "取景框",
+    openMain: "打开主窗口",
+    quit: "退出 Trans",
+  },
   lens: {
     title: "取景框",
     dragHint: "拖这里移动，拖四角改大小",
@@ -60,7 +67,8 @@ export const zh = {
     presetHint: "场景决定怎么分辨谁说的话、用哪套术语",
     start: "开始识别",
     stop: "停止",
-    idleHint: "把左边的框对准对方的聊天内容，再点开始识别",
+    idleHint: "把旁边的框对准对方的聊天内容，再点开始识别",
+    manualHint: "手动刷新：打开取景框时会读一次，之后有新消息请点「立即识别」",
     seen: "识别中 · 框里现在有 {{count}} 条",
     waiting: "正在识别，对方有新消息会出现在这里",
     empty: "还没有识别到内容",

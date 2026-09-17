@@ -18,6 +18,9 @@ body {
 /* 取景框窗口：整页透明，取景区才能看到底下的内容。index.html 为防白屏给 html/body 设了深色背景，这里覆盖掉。 */
 html.lens,
 html.lens body,
-html.lens #root {
+html.lens #root,
+html.bubble,
+html.bubble body,
+html.bubble #root {
   background: transparent !important;
 }

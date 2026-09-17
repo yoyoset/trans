@@ -9,10 +9,8 @@ use trans_domain::geometry::Rect;
 
 use crate::capture_session::{CaptureInfo, CaptureStatus};
 use crate::error::CommandError;
+use crate::overlay_windows;
 use crate::state::AppState;
-
-/// 取景框窗口的 label，和 tauri.conf.json 里一致。
-const LENS_WINDOW: &str = "lens";
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
@@ -46,31 +44,31 @@ pub fn capture_status(state: State<'_, AppState>) -> CaptureStatus {
     state.capture.status()
 }
 
-/// 打开取景框，并立刻把它排除出截图——它浮在内容上面，不排除就只会拍到自己。
+/// 打开取景框（排除出截图后再显示）。
 #[tauri::command]
 pub fn open_lens(app: AppHandle) -> Result<(), CommandError> {
-    let window =
-        app.get_webview_window(LENS_WINDOW).ok_or_else(|| CommandError::new("lens_missing", "取景框窗口不存在"))?;
-    #[cfg(windows)]
-    {
-        let hwnd = window.hwnd().map_err(CommandError::internal)?;
-        trans_win::exclude_from_capture(hwnd.0)
-            .map_err(|error| CommandError::new("lens_not_excluded", format!("无法把取景框排除出截图：{error}")))?;
-    }
-    tracing::info!(capturing = state_is_running(&app), "lens opened");
-    window.show().map_err(CommandError::internal)?;
-    window.set_focus().map_err(CommandError::internal)?;
+    overlay_windows::open_lens(&app)?;
+    refresh_on_reopen(&app);
     Ok(())
 }
 
+/// 只隐藏取景框，识别照常在后台进行。
 #[tauri::command]
 pub fn close_lens(app: AppHandle) -> Result<(), CommandError> {
-    if let Some(window) = app.get_webview_window(LENS_WINDOW) {
-        // 只隐藏窗口，识别照常在后台进行；重新打开时面板里会有隐藏期间识别到的消息。
-        tracing::info!(capturing = state_is_running(&app), "lens hidden");
-        window.hide().map_err(CommandError::internal)?;
+    tracing::info!(capturing = state_is_running(&app), "lens hidden");
+    overlay_windows::close_lens(&app)
+}
+
+/// 悬浮按钮点击：开关取景框，返回切换后是否可见。
+#[tauri::command]
+pub fn toggle_lens(app: AppHandle) -> Result<bool, CommandError> {
+    let visible = overlay_windows::toggle_lens(&app)?;
+    if visible {
+        refresh_on_reopen(&app);
+    } else {
+        tracing::info!(capturing = state_is_running(&app), "lens hidden from floating button");
     }
-    Ok(())
+    Ok(visible)
 }
 
 #[tauri::command]
@@ -127,6 +125,12 @@ pub fn refresh_capture(state: State<'_, AppState>) -> Result<(), CommandError> {
 #[tauri::command]
 pub async fn stop_capture(state: State<'_, AppState>) -> Result<CaptureStatus, CommandError> {
     Ok(state.capture.stop().await)
+}
+
+/// 取景框重新出现时立即读一轮：离开期间来的新消息马上显示，不管刷新节奏是不是手动。
+fn refresh_on_reopen(app: &AppHandle) {
+    let refreshed = app.state::<AppState>().capture.refresh_if_running();
+    tracing::info!(capturing = refreshed, "lens opened");
 }
 
 fn state_is_running(app: &AppHandle) -> bool {

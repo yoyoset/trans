@@ -98,6 +98,7 @@ export function LensPanel({
             ? t("lens.seen", { count: status?.last_seen ?? 0 })
             : t("lens.idleHint")}
         </p>
+        {running && refreshMs === null && <p className="text-xs text-amber-300">{t("lens.manualHint")}</p>}
         {status?.last_error && <p className="text-xs text-amber-300">{status.last_error}</p>}
         {error && <ErrorNotice error={error} />}
       </header>

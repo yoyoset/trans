@@ -123,11 +123,21 @@ impl CaptureSession {
 
     /// `None` 为手动模式：开始识别时读一次，之后只在用户点刷新时读。
     pub fn set_interval(&self, interval: Option<Duration>) {
-        tracing::info!(
-            interval_ms = interval.map(|d| d.as_millis() as u64),
-            "capture refresh interval set (none = manual)"
-        );
+        match interval {
+            Some(interval) => tracing::info!(interval_ms = interval.as_millis() as u64, "capture refresh: timed"),
+            None => tracing::info!("capture refresh: manual"),
+        }
         self.refresh.set_interval(interval);
+    }
+
+    /// 正在识别就马上读一轮，没在识别什么都不做。重新打开取景框时调用：
+    /// 手动刷新模式下，用户离开期间来的新消息不会自己出现，打开取景框正是"我回来了"的时刻。
+    pub fn refresh_if_running(&self) -> bool {
+        let running = self.status().running.is_some();
+        if running {
+            self.refresh.request_refresh();
+        }
+        running
     }
 
     pub fn refresh_now(&self) -> Result<(), CommandError> {

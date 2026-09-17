@@ -16,6 +16,11 @@ export const getCaptureStatus = () => call<CaptureStatus>("capture_status");
 export const listCaptureWindows = () => call<WindowInfo[]>("list_capture_windows");
 export const openLens = () => call<void>("open_lens");
 export const closeLens = () => call<void>("close_lens");
+/** 开关取景框，返回切换后是否可见。 */
+export const toggleLens = () => call<boolean>("toggle_lens");
+export const showMainWindow = () => call<void>("show_main_window");
+/** 真正退出应用（主窗口的关闭按钮只是收起成悬浮按钮）。 */
+export const quitApp = () => call<void>("quit_app");
 
 export const previewCapture = (source: CaptureSourceArgs, presetId: string) =>
   call<CapturePreview>("preview_capture", { request: { source, preset_id: presetId } });

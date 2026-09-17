@@ -5,6 +5,7 @@ mod commands;
 mod engines;
 mod error;
 mod logging;
+mod overlay_windows;
 mod refresh;
 mod settings_store;
 mod state;
@@ -16,12 +17,21 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
+            if let Err(error) = overlay_windows::show_main(app) {
+                tracing::warn!(?error, "failed to bring the main window back");
             }
         }))
+        .on_window_event(|window, event| {
+            // 关主窗口不退出：收成悬浮按钮，识别和本地引擎都继续运行。
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == overlay_windows::MAIN {
+                    api.prevent_close();
+                    if let Err(error) = overlay_windows::collapse_to_bubble(window.app_handle()) {
+                        tracing::warn!(?error, "failed to collapse to the floating button");
+                    }
+                }
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             match app.path().app_log_dir() {
@@ -50,6 +60,9 @@ pub fn run() {
             commands::capture::capture_supported,
             commands::capture::open_lens,
             commands::capture::close_lens,
+            commands::capture::toggle_lens,
+            commands::app_windows::show_main_window,
+            commands::app_windows::quit_app,
             commands::capture::capture_status,
             commands::capture::list_capture_windows,
             commands::capture::preview_capture,
