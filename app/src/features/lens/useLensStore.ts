@@ -14,20 +14,24 @@ import { calibrateTranslation, listPresets, translateText } from "../../api/tran
 import type { CaptureStatus, PresetSummary, TranslationOutcome, Turn } from "../../api/types";
 
 /** 面板里最多保留多少句，超出丢最早的，长时间识别也不会无限增长。 */
-const MAX_LINES = 100;
+export const MAX_LINES = 100;
 
 /** 刷新节奏选项（毫秒）；null 为手动。 */
 export const REFRESH_OPTIONS: Array<number | null> = [null, 1000, 2000, 3000, 5000, 10000];
 const REFRESH_STORAGE_KEY = "trans.lens.refreshMs";
 const DEFAULT_REFRESH_MS = 2000;
 
-/** 读保存的刷新节奏；存储不可用或值不在选项里时用默认值。 */
+/** 解析保存的刷新节奏（"manual" 或毫秒数）；不在选项里的值一律用默认值。 */
+export function parseRefreshMs(raw: string | null): number | null {
+  if (raw === null) return DEFAULT_REFRESH_MS;
+  const value = raw === "manual" ? null : Number(raw);
+  return REFRESH_OPTIONS.includes(value) ? value : DEFAULT_REFRESH_MS;
+}
+
+/** 读保存的刷新节奏；存储不可用时用默认值。 */
 function loadRefreshMs(): number | null {
   try {
-    const raw = localStorage.getItem(REFRESH_STORAGE_KEY);
-    if (raw === null) return DEFAULT_REFRESH_MS;
-    const value = raw === "manual" ? null : Number(raw);
-    return REFRESH_OPTIONS.includes(value) ? value : DEFAULT_REFRESH_MS;
+    return parseRefreshMs(localStorage.getItem(REFRESH_STORAGE_KEY));
   } catch {
     return DEFAULT_REFRESH_MS;
   }

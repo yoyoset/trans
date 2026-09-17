@@ -17,16 +17,24 @@ const DEFAULT_LAYOUT: LensLayout = { side: "right", panelWidth: 360 };
 export const clampPanelWidth = (width: number) =>
   Math.round(Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, width)));
 
+/** 解析保存的布局；为空、不是 JSON、字段非法时逐项退回默认值。 */
+export function parseLayout(raw: string | null): LensLayout {
+  if (!raw) return DEFAULT_LAYOUT;
+  try {
+    const parsed = JSON.parse(raw) as Partial<LensLayout> | null;
+    return {
+      side: parsed?.side === "left" ? "left" : "right",
+      panelWidth: clampPanelWidth(Number(parsed?.panelWidth) || DEFAULT_LAYOUT.panelWidth),
+    };
+  } catch {
+    return DEFAULT_LAYOUT;
+  }
+}
+
 /** 读保存的布局；存储不可用或内容损坏时退回默认值，不影响取景框正常使用。 */
 function loadLayout(): LensLayout {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_LAYOUT;
-    const parsed = JSON.parse(raw) as Partial<LensLayout>;
-    return {
-      side: parsed.side === "left" ? "left" : "right",
-      panelWidth: clampPanelWidth(Number(parsed.panelWidth) || DEFAULT_LAYOUT.panelWidth),
-    };
+    return parseLayout(localStorage.getItem(STORAGE_KEY));
   } catch {
     return DEFAULT_LAYOUT;
   }

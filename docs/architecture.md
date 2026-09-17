@@ -243,7 +243,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 | 状态 | 不用全局可变状态；配置和依赖通过构造注入 |
 | 错误 | 库 crate 用 thiserror 类型化错误；UI 展示分两层：人话摘要 + 可展开的技术详情 |
 | 前端 | 按 feature 分目录；只有 `api/` 能调用 invoke；每个 feature 自己一个 zustand store |
-| 质量门禁 | `scripts/check.sh`：`cargo fmt`、`clippy -D warnings`、`cargo test`、`tsc` + `vite build` 全绿才提交（eslint 尚未接入，见 §13） |
+| 质量门禁 | `scripts/check.sh`：`cargo fmt`、`clippy -D warnings`、`cargo test`、`vitest`、`tsc` + `vite build` 全绿才提交（eslint 尚未接入，见 §13） |
 | 决策记录 | 每个关键决策写一份 ADR（背景、选项、实测数据、结论） |
 
 ---
@@ -330,7 +330,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 6. **取景框挡住鼠标**：取景区虽然透明，但仍属于取景框窗口，点不到下面的聊天窗口，需要先挪开框。计划用全局热键切换点击穿透（涉及交互，待用户确认）。跟随窗口模式（按预设锚点随窗口缩放）后端保留，暂无界面入口。
 7. **输入法候选框会被识别**：它是系统独立窗口，无法排除出截图，浮到取景区上就会被读进来。目前的应对是刷新节奏可选「手动」（存在取景框本地偏好里，不在 settings.json）；打字时自动暂停识别尚未做。
 8. **尚未实现**：发送管道（SendJob 状态机）、面板贴靠目标窗口、自动更新。（日志已落盘：应用 `trans.log` + 上一次运行的 `trans.previous.log`，llama-server `llama-server.log`，均在 `%LOCALAPPDATA%m.trans.chatogs`。）
-9. **前端没有自动化测试，也没有接入 eslint**；业务规则都在 Rust 侧并有单元测试，前端目前只有类型检查。
+9. **前端测试只覆盖取景框状态层，也没有接入 eslint**：vitest 覆盖布局/刷新偏好解析、句子上限、过期回复翻译丢弃、单句失败隔离、校对上下文（替换 api 模块，不需要 Tauri）；组件渲染没有测试。
 10. **没有 CI**：仓库还没有远程，质量门只在本地由 `scripts/check.sh` 执行；发布到 GitHub 时再加 workflow（届时用 windows runner，trans-win 只在 Windows 编译）。
 11. **停止 `tauri dev` 后 vite 子进程可能残留**，占着 1430 端口，下次启动报端口占用；需手动结束对应 node 进程。只影响开发，不影响用户。
 - CLI Agent 包装层的延迟可能不满足"边打边出" → 靠 Draft/Final 分层 + 本地模型兜底。

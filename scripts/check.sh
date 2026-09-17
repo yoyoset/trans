@@ -18,6 +18,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 step "cargo test"
 cargo test --workspace
 
+step "frontend tests"
+(cd app && npm test)
+
 step "frontend typecheck + build"
 (cd app && npm run build)
 
