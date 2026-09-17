@@ -46,6 +46,9 @@ pub trait WindowCapture: Send + Sync {
 /// 不关心底下是哪个窗口。实现必须把本程序自己的窗口排除在外，否则只会拍到取景框自己。
 pub trait ScreenCapture: Send + Sync {
     fn grab_region(&self, rect: Rect) -> Result<Frame, CaptureError>;
+
+    /// 识别停止时调用：实现可以借此关闭常驻截图会话等资源。下次 `grab_region` 时按需重建。
+    fn release(&self) {}
 }
 
 pub trait OcrEngine: Send + Sync {

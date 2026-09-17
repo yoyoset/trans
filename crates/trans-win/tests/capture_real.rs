@@ -21,7 +21,7 @@ use trans_domain::region::{AnchoredRegion, EdgeValue, Origin, Unit};
 use trans_win::{GraphicsCapture, MonitorCapture, WindowsOcr};
 
 fn pipeline() -> CapturePipeline {
-    CapturePipeline::new(Arc::new(GraphicsCapture), Arc::new(MonitorCapture), Arc::new(WindowsOcr))
+    CapturePipeline::new(Arc::new(GraphicsCapture), Arc::new(MonitorCapture::default()), Arc::new(WindowsOcr))
 }
 
 fn lang() -> Lang {
@@ -30,6 +30,13 @@ fn lang() -> Lang {
 
 fn target(source: CaptureSource) -> CaptureTarget {
     CaptureTarget { source, parser: LineParser::Bubble, scale: 1.0, lang: lang() }
+}
+
+fn rect_from_env() -> Rect {
+    let raw = std::env::var("TRANS_CAPTURE_RECT").unwrap_or_else(|_| "0,0,1200,800".into());
+    let parts: Vec<i64> = raw.split(',').map(|p| p.trim().parse().expect("rect is x,y,width,height")).collect();
+    let [x, y, width, height] = parts[..] else { panic!("TRANS_CAPTURE_RECT needs 4 numbers") };
+    Rect { x: x as i32, y: y as i32, width: width as u32, height: height as u32 }
 }
 
 /// 整个窗口客户区。
@@ -78,11 +85,7 @@ fn reads_messages_from_a_real_window() {
 #[test]
 #[ignore = "needs something readable on screen at the given rectangle"]
 fn reads_messages_from_a_screen_rectangle_like_the_lens_does() {
-    let raw = std::env::var("TRANS_CAPTURE_RECT").unwrap_or_else(|_| "0,0,1200,800".into());
-    let parts: Vec<i64> = raw.split(',').map(|p| p.trim().parse().expect("rect is x,y,width,height")).collect();
-    let [x, y, width, height] = parts[..] else { panic!("TRANS_CAPTURE_RECT needs 4 numbers") };
-    let rect = Rect { x: x as i32, y: y as i32, width: width as u32, height: height as u32 };
-
+    let rect = rect_from_env();
     let pipeline = pipeline();
     let started = Instant::now();
     let outcome = pipeline.poll(&target(CaptureSource::Screen { rect })).expect("screen region capture works");
@@ -97,4 +100,27 @@ fn reads_messages_from_a_screen_rectangle_like_the_lens_does() {
     }
     assert_eq!(outcome.region, rect, "the lens must capture exactly the rectangle it was given");
     assert!(!outcome.all.is_empty(), "expected some text inside the rectangle");
+}
+
+/// 分段计时：连续几轮只截图、再对同一帧只做 OCR，看持续识别时时间花在哪；
+/// 同时打印识别文字，框住一块会变化的内容（比如计时器）可以确认拿到的不是旧帧。
+#[test]
+#[ignore = "timing benchmark on the real desktop"]
+fn times_screen_grab_and_ocr_separately() {
+    use trans_application::capture::{OcrEngine, ScreenCapture};
+
+    let rect = rect_from_env();
+    let capture = MonitorCapture::default();
+    let ocr = WindowsOcr;
+    for round in 1..=5 {
+        let started = Instant::now();
+        let frame = capture.grab_region(rect).expect("grab works");
+        let grab_ms = started.elapsed().as_millis();
+        let started = Instant::now();
+        let lines = ocr.recognize(&frame, &lang()).expect("ocr works");
+        let text: Vec<&str> = lines.iter().map(|line| line.text.as_str()).collect();
+        println!("round {round}: grab {grab_ms} ms, ocr {} ms: {text:?}", started.elapsed().as_millis());
+        // 间隔一会儿再抓：画面在变时，常驻会话给出的必须是新内容而不是旧帧。
+        std::thread::sleep(std::time::Duration::from_millis(900));
+    }
 }

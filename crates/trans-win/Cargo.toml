@@ -9,6 +9,7 @@ publish = false
 [target.'cfg(windows)'.dependencies]
 trans-application = { workspace = true }
 trans-domain = { workspace = true }
+tracing = { workspace = true }
 windows-capture = { workspace = true }
 windows-collections = { workspace = true }
 windows-future = { workspace = true }

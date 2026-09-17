@@ -80,6 +80,11 @@ impl CapturePipeline {
         self.reconciler.lock().unwrap_or_else(PoisonError::into_inner).reset();
     }
 
+    /// 识别停止时调用，释放截图会话等常驻资源；判重历史不受影响。
+    pub fn release(&self) {
+        self.screen.release();
+    }
+
     /// 抓一帧并返回新出现的消息，同时把它们记入判重历史。
     pub fn poll(&self, target: &CaptureTarget) -> Result<PollOutcome, PipelineError> {
         let (all, region) = self.observe(target)?;

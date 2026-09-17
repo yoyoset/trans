@@ -134,6 +134,10 @@ impl CaptureSession {
         if let Some(handle) = self.task.lock().await.take() {
             handle.abort();
         }
+        if let Some(pipeline) = &self.pipeline {
+            // 常驻截图会话只在识别时需要，停了就关掉。
+            pipeline.release();
+        }
         *self.target.write().unwrap_or_else(PoisonError::into_inner) = None;
         self.update_status(|status| status.running = None);
         self.status()

@@ -5,7 +5,9 @@
 mod capture;
 mod credential;
 mod ocr;
+mod screen_capture;
 
-pub use capture::{exclude_from_capture, GraphicsCapture, MonitorCapture};
+pub use capture::{exclude_from_capture, GraphicsCapture};
 pub use credential::CredentialStore;
 pub use ocr::WindowsOcr;
+pub use screen_capture::MonitorCapture;

@@ -4673,6 +4673,7 @@ dependencies = [
 name = "trans-win"
 version = "0.1.0"
 dependencies = [
+ "tracing",
  "trans-application",
  "trans-domain",
  "windows 0.62.2",

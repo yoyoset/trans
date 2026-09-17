@@ -74,7 +74,7 @@ pub fn spawn_apply_engines(app: AppHandle) {
 fn capture_pipeline() -> Option<Arc<trans_application::capture_pipeline::CapturePipeline>> {
     Some(Arc::new(trans_application::capture_pipeline::CapturePipeline::new(
         Arc::new(trans_win::GraphicsCapture),
-        Arc::new(trans_win::MonitorCapture),
+        Arc::new(trans_win::MonitorCapture::default()),
         Arc::new(trans_win::WindowsOcr),
     )))
 }

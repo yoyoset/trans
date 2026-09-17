@@ -1,19 +1,15 @@
-//! Windows.Graphics.Capture 截图：按窗口，或按屏幕区域（取景框用）。
+//! Windows.Graphics.Capture 按窗口截图（跟随窗口模式）。取景框的屏幕区域截图见 `screen_capture`。
 //!
-//! 当前实现每次调用都新建截图会话、取一帧后结束。M0-01 实测建立会话到首帧要 594 ms，
-//! 持续识别时应改成常驻会话（已列入 architecture.md「已知问题」）。
+//! 这里每次调用都新建截图会话、取一帧后结束（M0-01 实测首帧 594 ms）。跟随窗口模式目前没有界面入口，
+//! 所以暂不改成常驻会话（已列入 architecture.md「已知问题」）。
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use trans_application::capture::{CaptureError, Frame, ScreenCapture, WindowCapture, WindowId, WindowInfo};
-use trans_domain::geometry::Rect;
-use windows::Win32::Foundation::POINT;
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+use trans_application::capture::{CaptureError, Frame, WindowCapture, WindowId, WindowInfo};
 use windows_capture::capture::{Context, GraphicsCaptureApiHandler};
 use windows_capture::frame::Frame as CaptureFrame;
 use windows_capture::graphics_capture_api::InternalCaptureControl;
-use windows_capture::monitor::Monitor;
 use windows_capture::settings::{
     ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings, GraphicsCaptureItemType,
     MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
@@ -51,39 +47,6 @@ impl WindowCapture for GraphicsCapture {
             return Err(CaptureError::WindowNotFound);
         }
         grab_once(window)
-    }
-}
-
-/// 取景框用：截取屏幕上的一块绝对区域。
-///
-/// 做法是找出区域所在的显示器、整屏截一帧、再按显示器原点裁出这块区域。
-/// 本程序自己的窗口要调用 [`exclude_from_capture`] 排除，否则截到的就是取景框自己。
-#[derive(Debug, Default, Clone, Copy)]
-pub struct MonitorCapture;
-
-impl ScreenCapture for MonitorCapture {
-    fn grab_region(&self, rect: Rect) -> Result<Frame, CaptureError> {
-        if rect.width == 0 || rect.height == 0 {
-            return Err(CaptureError::Backend("取景框大小为 0".into()));
-        }
-        let center = POINT { x: rect.x + rect.width as i32 / 2, y: rect.y + rect.height as i32 / 2 };
-        // SAFETY: MonitorFromPoint 只读系统状态；MONITOR_DEFAULTTONEAREST 保证返回有效句柄。
-        let handle = unsafe { MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST) };
-        let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
-        // SAFETY: handle 有效，info 已按要求填好 cbSize。
-        let ok = unsafe { GetMonitorInfoW(handle, &raw mut info) }.as_bool();
-        if !ok {
-            return Err(CaptureError::Backend("读取显示器信息失败".into()));
-        }
-
-        let frame = grab_once(Monitor::from_raw_hmonitor(handle.0))?;
-        let local = Rect {
-            x: rect.x - info.rcMonitor.left,
-            y: rect.y - info.rcMonitor.top,
-            width: rect.width,
-            height: rect.height,
-        };
-        frame.crop(local).map_err(|error| CaptureError::Backend(format!("取景框超出显示器范围：{error}")))
     }
 }
 
