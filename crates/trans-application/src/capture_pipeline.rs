@@ -1,6 +1,9 @@
 //! 读取管道：取一块画面 → 放大 → OCR → 拼成消息 → 跨帧去重。
 //!
 //! 只做"这一帧看到了什么"，不负责翻译，也不负责定时。定时由壳层的后台任务决定。
+//!
+//! 画面和上一轮逐字节相同时直接复用上一轮的识别结果，跳过放大和 OCR：取景框用常驻截图会话后，
+//! 聊天没人说话时连续多轮拿到的都是同一帧，每轮 OCR 实测 51～85 ms 是纯浪费。
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -63,11 +66,25 @@ pub struct CapturePipeline {
     screen: Arc<dyn ScreenCapture>,
     ocr: Arc<dyn OcrEngine>,
     reconciler: Mutex<Reconciler>,
+    /// 上一轮的画面和识别结果，只留一份。
+    last: Mutex<Option<Recognized>>,
+}
+
+struct Recognized {
+    target: CaptureTarget,
+    frame: Frame,
+    messages: Vec<ParsedMessage>,
 }
 
 impl CapturePipeline {
     pub fn new(windows: Arc<dyn WindowCapture>, screen: Arc<dyn ScreenCapture>, ocr: Arc<dyn OcrEngine>) -> Self {
-        Self { windows, screen, ocr, reconciler: Mutex::new(Reconciler::new(RECONCILER_CAPACITY)) }
+        Self {
+            windows,
+            screen,
+            ocr,
+            reconciler: Mutex::new(Reconciler::new(RECONCILER_CAPACITY)),
+            last: Mutex::new(None),
+        }
     }
 
     /// 可截取的窗口列表，供"跟随窗口"模式选目标。
@@ -78,11 +95,13 @@ impl CapturePipeline {
     /// 换目标、换预设、重新框选后必须调用，否则新会话的内容会被当成重复而丢掉。
     pub fn reset(&self) {
         self.reconciler.lock().unwrap_or_else(PoisonError::into_inner).reset();
+        *self.last.lock().unwrap_or_else(PoisonError::into_inner) = None;
     }
 
     /// 识别停止时调用，释放截图会话等常驻资源；判重历史不受影响。
     pub fn release(&self) {
         self.screen.release();
+        *self.last.lock().unwrap_or_else(PoisonError::into_inner) = None;
     }
 
     /// 抓一帧并返回新出现的消息，同时把它们记入判重历史。
@@ -101,9 +120,18 @@ impl CapturePipeline {
 
     fn observe(&self, target: &CaptureTarget) -> Result<(Vec<ParsedMessage>, Rect), PipelineError> {
         let (frame, region) = self.grab(&target.source)?;
+        {
+            let last = self.last.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some(last) = last.as_ref().filter(|last| last.target == *target && last.frame == frame) {
+                return Ok((last.messages.clone(), region));
+            }
+        }
         let scaled = frame.scaled(target.scale);
         let lines = self.ocr.recognize(&scaled, &target.lang)?;
-        Ok((parse_lines(&lines, scaled.width(), &target.parser), region))
+        let messages = parse_lines(&lines, scaled.width(), &target.parser);
+        *self.last.lock().unwrap_or_else(PoisonError::into_inner) =
+            Some(Recognized { target: target.clone(), frame, messages: messages.clone() });
+        Ok((messages, region))
     }
 
     fn grab(&self, source: &CaptureSource) -> Result<(Frame, Rect), PipelineError> {
@@ -125,7 +153,7 @@ mod tests {
     use trans_domain::conversation::Speaker;
     use trans_domain::geometry::Size;
     use trans_domain::region::{EdgeValue, Origin, Unit};
-    use trans_domain::test_support::{solid_frame, TestOcrLine};
+    use trans_domain::test_support::TestOcrLine;
 
     use super::*;
     use crate::capture::OcrLine;
@@ -133,6 +161,16 @@ mod tests {
     struct FakeCapture {
         size: Size,
         error: Option<CaptureError>,
+        grabs: StdMutex<u8>,
+    }
+
+    /// 每次调用返回内容不同的画面，模拟聊天在变化；`changing = false` 时画面始终相同。
+    fn next_frame(counter: &StdMutex<u8>, width: u32, height: u32, changing: bool) -> Frame {
+        let mut count = counter.lock().unwrap();
+        if changing {
+            *count = count.wrapping_add(1);
+        }
+        Frame::new(width, height, vec![*count; width as usize * height as usize * 4]).unwrap()
     }
 
     impl WindowCapture for FakeCapture {
@@ -142,21 +180,23 @@ mod tests {
         fn grab_frame(&self, _: WindowId) -> Result<Frame, CaptureError> {
             match &self.error {
                 Some(error) => Err(error.clone()),
-                None => Ok(solid_frame(self.size.width, self.size.height)),
+                None => Ok(next_frame(&self.grabs, self.size.width, self.size.height, true)),
             }
         }
     }
 
-    /// 记录被要求截取的屏幕区域，并按该尺寸返回画面。
+    /// 记录被要求截取的屏幕区域，并按该尺寸返回画面；`still` 为真时画面不变（没人说话）。
     #[derive(Default)]
     struct FakeScreen {
         asked: StdMutex<Vec<Rect>>,
+        grabs: StdMutex<u8>,
+        still: bool,
     }
 
     impl ScreenCapture for FakeScreen {
         fn grab_region(&self, rect: Rect) -> Result<Frame, CaptureError> {
             self.asked.lock().unwrap().push(rect);
-            Ok(solid_frame(rect.width, rect.height))
+            Ok(next_frame(&self.grabs, rect.width, rect.height, !self.still))
         }
     }
 
@@ -203,14 +243,14 @@ mod tests {
     }
 
     fn window_pipeline(size: Size, ocr: Arc<FakeOcr>) -> CapturePipeline {
-        pipeline(FakeCapture { size, error: None }, Arc::new(FakeScreen::default()), ocr)
+        pipeline(FakeCapture { size, error: None, grabs: StdMutex::new(0) }, Arc::new(FakeScreen::default()), ocr)
     }
 
     #[test]
     fn the_lens_captures_exactly_the_rectangle_it_was_given() {
         let screen = Arc::new(FakeScreen::default());
         let ocr = FakeOcr::new(vec![vec![TestOcrLine::new("Hi there!", 10, 10)]]);
-        let capture = FakeCapture { size: Size { width: 1, height: 1 }, error: None };
+        let capture = FakeCapture { size: Size { width: 1, height: 1 }, error: None, grabs: StdMutex::new(0) };
         let pipeline = pipeline(capture, screen.clone(), ocr.clone());
         let rect = Rect { x: 1200, y: 640, width: 520, height: 300 };
 
@@ -220,6 +260,43 @@ mod tests {
         assert_eq!(ocr.frames.lock().unwrap()[0], (1040, 600), "OCR sees the scaled lens content");
         assert_eq!(outcome.region, rect);
         assert_eq!(outcome.fresh.len(), 1);
+    }
+
+    #[test]
+    fn an_unchanged_screen_reuses_the_last_recognition_without_running_ocr() {
+        let screen = Arc::new(FakeScreen { still: true, ..FakeScreen::default() });
+        let ocr = FakeOcr::new(vec![vec![TestOcrLine::new("Hi there!", 10, 10)]]);
+        let capture = FakeCapture { size: Size { width: 1, height: 1 }, error: None, grabs: StdMutex::new(0) };
+        let pipeline = pipeline(capture, screen, ocr.clone());
+        let rect = Rect { x: 0, y: 0, width: 300, height: 200 };
+        let lens = target(CaptureSource::Screen { rect }, 1.0);
+
+        assert_eq!(pipeline.poll(&lens).unwrap().fresh.len(), 1);
+        let second = pipeline.poll(&lens).unwrap();
+        assert_eq!(ocr.frames.lock().unwrap().len(), 1, "same frame, same target: OCR must not run again");
+        assert_eq!(second.all.len(), 1, "the reused recognition is still reported");
+        assert!(second.fresh.is_empty(), "and nothing counts as new");
+
+        // 预设（放大倍数）变了：同一帧也要重新识别。
+        pipeline.poll(&target(CaptureSource::Screen { rect }, 2.0)).unwrap();
+        assert_eq!(ocr.frames.lock().unwrap().len(), 2);
+
+        // reset 之后缓存和判重历史一起清掉，同一屏内容重新算作新消息。
+        pipeline.reset();
+        pipeline.poll(&lens).unwrap();
+        assert_eq!(ocr.frames.lock().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn preview_then_poll_on_an_unchanged_screen_still_reports_the_messages_as_new() {
+        let screen = Arc::new(FakeScreen { still: true, ..FakeScreen::default() });
+        let ocr = FakeOcr::new(vec![vec![TestOcrLine::new("Hi there!", 10, 10)]]);
+        let capture = FakeCapture { size: Size { width: 1, height: 1 }, error: None, grabs: StdMutex::new(0) };
+        let pipeline = pipeline(capture, screen, ocr);
+        let lens = target(CaptureSource::Screen { rect: Rect { x: 0, y: 0, width: 300, height: 200 } }, 1.0);
+
+        assert!(pipeline.preview(&lens).unwrap().fresh.is_empty());
+        assert_eq!(pipeline.poll(&lens).unwrap().fresh.len(), 1, "cache reuse must not bypass dedupe bookkeeping");
     }
 
     #[test]
@@ -275,7 +352,7 @@ mod tests {
     fn a_minimized_window_surfaces_the_capture_error_unchanged() {
         let error = CaptureError::NoFrame { timeout_ms: 3000 };
         let pipeline = pipeline(
-            FakeCapture { size: Size { width: 400, height: 300 }, error: Some(error.clone()) },
+            FakeCapture { size: Size { width: 400, height: 300 }, error: Some(error.clone()), grabs: StdMutex::new(0) },
             Arc::new(FakeScreen::default()),
             FakeOcr::new(vec![]),
         );

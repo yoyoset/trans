@@ -98,6 +98,10 @@ fn reads_messages_from_a_screen_rectangle_like_the_lens_does() {
     for message in outcome.all.iter().take(8) {
         println!("  {:?} | {}", message.speaker, message.text);
     }
+    // 画面没变的第二轮：复用上一轮识别结果，不再跑 OCR。
+    let started = Instant::now();
+    let second = pipeline.poll(&target(CaptureSource::Screen { rect })).expect("second poll works");
+    println!("unchanged second poll: {} ms, fresh {}", started.elapsed().as_millis(), second.fresh.len());
     assert_eq!(outcome.region, rect, "the lens must capture exactly the rectangle it was given");
     assert!(!outcome.all.is_empty(), "expected some text inside the rectangle");
 }
