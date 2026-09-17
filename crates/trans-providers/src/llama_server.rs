@@ -253,7 +253,7 @@ gguf_init: failed to open model
         let tail = log_tail(&log).unwrap();
         let lines: Vec<&str> = tail.lines().collect();
         assert_eq!(lines.len(), FAILURE_LOG_LINES);
-        assert_eq!(lines[0], "d");
+        assert_eq!(lines[0], "c");
         assert!(lines[4].ends_with('…') && lines[4].chars().count() == FAILURE_LOG_LINE_CHARS + 1);
         assert_eq!(lines[5], "gguf_init: failed to open model");
     }
