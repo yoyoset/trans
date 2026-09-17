@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -5,10 +6,19 @@ import { Button } from "../../shared/ui/Button";
 import { ErrorNotice } from "../../shared/ui/ErrorNotice";
 import { LineItem } from "./LineItem";
 import { ReplyBox } from "./ReplyBox";
+import type { PanelSide } from "./useLensLayout";
 import { useLensStore, type LensRect } from "./useLensStore";
 
-/** 取景框右侧面板：场景 → 开始/停止 → 识别到的句子（点哪句翻哪句）→ 我的回复。 */
-export function LensPanel({ captureRect }: { captureRect: () => Promise<LensRect | null> }) {
+/** 取景框旁的面板：场景 → 开始/停止 → 识别到的句子（点哪句翻哪句）→ 我的回复。可放在取景区左边或右边。 */
+export function LensPanel({
+  captureRect,
+  width,
+  side,
+}: {
+  captureRect: () => Promise<LensRect | null>;
+  width: number;
+  side: PanelSide;
+}) {
   const { t } = useTranslation();
   const store = useLensStore();
   const listEnd = useRef<HTMLDivElement>(null);
@@ -25,7 +35,13 @@ export function LensPanel({ captureRect }: { captureRect: () => Promise<LensRect
   };
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col rounded-r-md border-l border-zinc-800 bg-zinc-950">
+    <aside
+      style={{ width }}
+      className={clsx(
+        "flex shrink-0 flex-col border-zinc-800 bg-zinc-950",
+        side === "right" ? "rounded-r-md border-l" : "rounded-l-md border-r",
+      )}
+    >
       <header data-tauri-drag-region className="space-y-2 border-b border-zinc-800 p-3">
         <div className="flex items-center gap-2">
           <select

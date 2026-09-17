@@ -25,6 +25,10 @@ export const startCapture = (source: CaptureSourceArgs, presetId: string) =>
 
 export const stopCapture = () => call<CaptureStatus>("stop_capture");
 
+/** 识别中挪动取景框或改布局后同步新区域；不清空已识别的句子。 */
+export const updateCaptureRegion = (rect: { x: number; y: number; width: number; height: number }) =>
+  call<CaptureStatus>("update_capture_region", rect);
+
 /** 新识别到的对方消息（还没翻译，用户点哪句翻哪句）。 */
 export const onCapturedLines = (handler: (lines: ParsedMessage[]) => void): Promise<UnlistenFn> =>
   listen<ParsedMessage[]>(CAPTURE_LINES_EVENT, (event) => handler(event.payload));

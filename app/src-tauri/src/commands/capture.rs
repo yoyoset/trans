@@ -95,6 +95,18 @@ pub async fn start_capture(request: CaptureArgs, state: State<'_, AppState>) -> 
     state.capture.start(target, info).await
 }
 
+/// 识别中挪动取景框、改大小、切换面板左右时调用，区域在下一轮识别生效，已识别的句子不会重复出现。
+#[tauri::command]
+pub fn update_capture_region(
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    state: State<'_, AppState>,
+) -> Result<CaptureStatus, CommandError> {
+    state.capture.update_region(Rect { x, y, width, height })
+}
+
 #[tauri::command]
 pub async fn stop_capture(state: State<'_, AppState>) -> Result<CaptureStatus, CommandError> {
     Ok(state.capture.stop().await)

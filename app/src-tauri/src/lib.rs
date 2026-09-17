@@ -45,6 +45,7 @@ pub fn run() {
             commands::capture::list_capture_windows,
             commands::capture::preview_capture,
             commands::capture::start_capture,
+            commands::capture::update_capture_region,
             commands::capture::stop_capture,
             commands::translate::translate_text,
             commands::translate::calibrate_translation,

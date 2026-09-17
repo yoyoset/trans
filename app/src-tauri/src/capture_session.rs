@@ -12,9 +12,10 @@ use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 use trans_application::capture::WindowInfo;
-use trans_application::capture_pipeline::{CapturePipeline, CaptureTarget};
+use trans_application::capture_pipeline::{CapturePipeline, CaptureSource, CaptureTarget};
 use trans_domain::chat_lines::ParsedMessage;
 use trans_domain::conversation::Speaker;
+use trans_domain::geometry::Rect;
 
 use crate::error::CommandError;
 
@@ -47,11 +48,19 @@ pub struct CaptureSession {
     pipeline: Option<Arc<CapturePipeline>>,
     task: Mutex<Option<JoinHandle<()>>>,
     status: RwLock<CaptureStatus>,
+    /// 当前识别目标。后台循环每一轮都读一次，所以识别中挪动取景框、改大小都能立即生效。
+    target: Arc<RwLock<Option<CaptureTarget>>>,
 }
 
 impl CaptureSession {
     pub fn new(app: AppHandle, pipeline: Option<Arc<CapturePipeline>>) -> Self {
-        Self { app, pipeline, task: Mutex::new(None), status: RwLock::new(CaptureStatus::default()) }
+        Self {
+            app,
+            pipeline,
+            task: Mutex::new(None),
+            status: RwLock::new(CaptureStatus::default()),
+            target: Arc::new(RwLock::new(None)),
+        }
     }
 
     /// 当前平台是否支持识别（非 Windows 上没有截图和 OCR 适配器）。
@@ -73,8 +82,9 @@ impl CaptureSession {
         // 换目标就清空判重历史，否则新位置上和之前相同的话会被当成重复丢掉。
         pipeline.reset();
 
-        let app = self.app.clone();
-        let handle = tauri::async_runtime::spawn(async move { run_loop(app, pipeline, target).await });
+        *self.target.write().unwrap_or_else(PoisonError::into_inner) = Some(target);
+        let (app, shared) = (self.app.clone(), self.target.clone());
+        let handle = tauri::async_runtime::spawn(async move { run_loop(app, pipeline, shared).await });
         *self.task.lock().await = Some(handle);
         self.update_status(|status| {
             status.running = Some(info);
@@ -84,10 +94,32 @@ impl CaptureSession {
         Ok(self.status())
     }
 
+    /// 识别中挪动取景框或改变布局后调用：只换识别区域，不清空判重历史，
+    /// 所以框里没变的句子不会在面板里重复出现。
+    pub fn update_region(&self, rect: Rect) -> Result<CaptureStatus, CommandError> {
+        {
+            let mut target = self.target.write().unwrap_or_else(PoisonError::into_inner);
+            match target.as_mut().map(|t| &mut t.source) {
+                Some(CaptureSource::Screen { rect: current }) => *current = rect,
+                Some(CaptureSource::Window { .. }) => {
+                    return Err(CommandError::new("not_lens", "当前不是取景框模式，不能更新区域"));
+                }
+                None => return Err(CommandError::new("not_running", "当前没有在识别")),
+            }
+        }
+        self.update_status(|status| {
+            if let Some(info) = status.running.as_mut() {
+                info.label = format!("取景框 {}×{}", rect.width, rect.height);
+            }
+        });
+        Ok(self.status())
+    }
+
     pub async fn stop(&self) -> CaptureStatus {
         if let Some(handle) = self.task.lock().await.take() {
             handle.abort();
         }
+        *self.target.write().unwrap_or_else(PoisonError::into_inner) = None;
         self.update_status(|status| status.running = None);
         self.status()
     }
@@ -108,12 +140,13 @@ impl CaptureSession {
     }
 }
 
-async fn run_loop(app: AppHandle, pipeline: Arc<CapturePipeline>, target: CaptureTarget) {
+async fn run_loop(app: AppHandle, pipeline: Arc<CapturePipeline>, shared: Arc<RwLock<Option<CaptureTarget>>>) {
     loop {
         let started = Instant::now();
+        // 每一轮重新读取目标：识别中更新的区域在下一轮生效。
+        let Some(target) = shared.read().unwrap_or_else(PoisonError::into_inner).clone() else { return };
         let poll = {
             let pipeline = pipeline.clone();
-            let target = target.clone();
             // 抓取和 OCR 都是阻塞调用，放到阻塞线程池，别占住异步运行时。
             tauri::async_runtime::spawn_blocking(move || pipeline.poll(&target)).await
         };
