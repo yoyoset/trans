@@ -2,7 +2,8 @@
 //!
 //! 这里不翻译：用户在面板上点哪句才翻译哪句。一屏刚识别出十几句时，如果全部自动送去本地模型
 //! （每句约 1.9 s），会排很长的队，而用户往往只关心其中一两句。
-//! 怎么抓、怎么解析在 `trans-application` 的读取管道里；这里只决定"多久抓一次"和"抓到之后推给谁"。
+//! 怎么抓、怎么解析在 `trans-application` 的读取管道里；这里只决定"什么时候抓"（见 [`RefreshControl`]）
+//! 和"抓到之后推给谁"。
 
 use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
@@ -18,12 +19,10 @@ use trans_domain::conversation::Speaker;
 use trans_domain::geometry::Rect;
 
 use crate::error::CommandError;
+use crate::refresh::RefreshControl;
 
 pub const CAPTURE_LINES_EVENT: &str = "capture-lines";
 pub const CAPTURE_STATUS_EVENT: &str = "capture-status";
-
-/// 抓取间隔。M0-01 实测小区域 OCR 只要几十 ms，间隔主要是为了不让 CPU 一直忙。
-const POLL_INTERVAL: Duration = Duration::from_millis(1200);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CaptureInfo {
@@ -50,6 +49,8 @@ pub struct CaptureSession {
     status: RwLock<CaptureStatus>,
     /// 当前识别目标。后台循环每一轮都读一次，所以识别中挪动取景框、改大小都能立即生效。
     target: Arc<RwLock<Option<CaptureTarget>>>,
+    /// 刷新节奏。不随停止/开始重置，用户选了手动就一直是手动。
+    refresh: Arc<RefreshControl>,
 }
 
 impl CaptureSession {
@@ -60,6 +61,7 @@ impl CaptureSession {
             task: Mutex::new(None),
             status: RwLock::new(CaptureStatus::default()),
             target: Arc::new(RwLock::new(None)),
+            refresh: Arc::new(RefreshControl::default()),
         }
     }
 
@@ -83,8 +85,8 @@ impl CaptureSession {
         pipeline.reset();
 
         *self.target.write().unwrap_or_else(PoisonError::into_inner) = Some(target);
-        let (app, shared) = (self.app.clone(), self.target.clone());
-        let handle = tauri::async_runtime::spawn(async move { run_loop(app, pipeline, shared).await });
+        let (app, shared, refresh) = (self.app.clone(), self.target.clone(), self.refresh.clone());
+        let handle = tauri::async_runtime::spawn(async move { run_loop(app, pipeline, shared, refresh).await });
         *self.task.lock().await = Some(handle);
         self.update_status(|status| {
             status.running = Some(info);
@@ -115,6 +117,19 @@ impl CaptureSession {
         Ok(self.status())
     }
 
+    /// `None` 为手动模式：开始识别时读一次，之后只在用户点刷新时读。
+    pub fn set_interval(&self, interval: Option<Duration>) {
+        self.refresh.set_interval(interval);
+    }
+
+    pub fn refresh_now(&self) -> Result<(), CommandError> {
+        if self.status().running.is_none() {
+            return Err(CommandError::new("not_running", "当前没有在识别"));
+        }
+        self.refresh.request_refresh();
+        Ok(())
+    }
+
     pub async fn stop(&self) -> CaptureStatus {
         if let Some(handle) = self.task.lock().await.take() {
             handle.abort();
@@ -140,7 +155,12 @@ impl CaptureSession {
     }
 }
 
-async fn run_loop(app: AppHandle, pipeline: Arc<CapturePipeline>, shared: Arc<RwLock<Option<CaptureTarget>>>) {
+async fn run_loop(
+    app: AppHandle,
+    pipeline: Arc<CapturePipeline>,
+    shared: Arc<RwLock<Option<CaptureTarget>>>,
+    refresh: Arc<RefreshControl>,
+) {
     loop {
         let started = Instant::now();
         // 每一轮重新读取目标：识别中更新的区域在下一轮生效。
@@ -169,8 +189,7 @@ async fn run_loop(app: AppHandle, pipeline: Arc<CapturePipeline>, shared: Arc<Rw
             Err(error) => publish_status(&app, |status| status.last_error = Some(error.to_string())),
         }
 
-        // 间隔从"这一轮开始"算起：识别花掉的时间算在里面，不会越积越慢。
-        tokio::time::sleep(POLL_INTERVAL.saturating_sub(started.elapsed())).await;
+        refresh.wait_next_round(started).await;
     }
 }
 

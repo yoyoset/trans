@@ -4,6 +4,7 @@ mod capture_session;
 mod commands;
 mod engines;
 mod error;
+mod refresh;
 mod settings_store;
 mod state;
 
@@ -46,6 +47,8 @@ pub fn run() {
             commands::capture::preview_capture,
             commands::capture::start_capture,
             commands::capture::update_capture_region,
+            commands::capture::set_capture_interval,
+            commands::capture::refresh_capture,
             commands::capture::stop_capture,
             commands::translate::translate_text,
             commands::translate::calibrate_translation,

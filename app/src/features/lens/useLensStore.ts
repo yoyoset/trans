@@ -1,12 +1,45 @@
 import { create } from "zustand";
 
-import { getCaptureStatus, onCapturedLines, onCaptureStatus, startCapture, stopCapture } from "../../api/capture";
+import {
+  getCaptureStatus,
+  onCapturedLines,
+  onCaptureStatus,
+  refreshCapture,
+  setCaptureInterval,
+  startCapture,
+  stopCapture,
+} from "../../api/capture";
 import { AppError, toAppError } from "../../api/client";
 import { calibrateTranslation, listPresets, translateText } from "../../api/translate";
 import type { CaptureStatus, PresetSummary, TranslationOutcome, Turn } from "../../api/types";
 
 /** 面板里最多保留多少句，超出丢最早的，长时间识别也不会无限增长。 */
 const MAX_LINES = 100;
+
+/** 刷新节奏选项（毫秒）；null 为手动。 */
+export const REFRESH_OPTIONS: Array<number | null> = [null, 1000, 2000, 3000, 5000, 10000];
+const REFRESH_STORAGE_KEY = "trans.lens.refreshMs";
+const DEFAULT_REFRESH_MS = 2000;
+
+/** 读保存的刷新节奏；存储不可用或值不在选项里时用默认值。 */
+function loadRefreshMs(): number | null {
+  try {
+    const raw = localStorage.getItem(REFRESH_STORAGE_KEY);
+    if (raw === null) return DEFAULT_REFRESH_MS;
+    const value = raw === "manual" ? null : Number(raw);
+    return REFRESH_OPTIONS.includes(value) ? value : DEFAULT_REFRESH_MS;
+  } catch {
+    return DEFAULT_REFRESH_MS;
+  }
+}
+
+function saveRefreshMs(value: number | null) {
+  try {
+    localStorage.setItem(REFRESH_STORAGE_KEY, value === null ? "manual" : String(value));
+  } catch {
+    // 只是偏好，存不下下次用默认值。
+  }
+}
 
 export interface LensRect {
   x: number;
@@ -42,11 +75,15 @@ interface LensState {
   reply: Reply;
   busy: boolean;
   error: AppError | null;
+  /** 刷新间隔（毫秒），null 为手动。 */
+  refreshMs: number | null;
   /** 加载场景列表并订阅识别推送；返回取消订阅函数。 */
   init: () => () => void;
   setPreset: (id: string) => void;
   start: (rect: LensRect) => Promise<void>;
   stop: () => Promise<void>;
+  setRefreshMs: (value: number | null) => void;
+  refreshNow: () => Promise<void>;
   clearLines: () => void;
   translateLine: (id: string) => Promise<void>;
   calibrateLine: (id: string) => Promise<void>;
@@ -82,6 +119,7 @@ export const useLensStore = create<LensState>((set, get) => {
     reply: emptyReply,
     busy: false,
     error: null,
+    refreshMs: loadRefreshMs(),
 
     init: () => {
       let disposed = false;
@@ -113,6 +151,7 @@ export const useLensStore = create<LensState>((set, get) => {
       listPresets()
         .then((presets) => !disposed && set((state) => ({ presets, presetId: state.presetId ?? presets[0]?.id ?? null })))
         .catch((error) => set({ error: toAppError(error) }));
+      setCaptureInterval(get().refreshMs).catch((error) => set({ error: toAppError(error) }));
       getCaptureStatus()
         .then((status) => !disposed && set({ status }))
         .catch((error) => console.error("capture_status failed", error));
@@ -149,6 +188,21 @@ export const useLensStore = create<LensState>((set, get) => {
         set({ error: toAppError(error) });
       } finally {
         set({ busy: false });
+      }
+    },
+
+    setRefreshMs: (value) => {
+      set({ refreshMs: value });
+      saveRefreshMs(value);
+      setCaptureInterval(value).catch((error) => set({ error: toAppError(error) }));
+    },
+
+    refreshNow: async () => {
+      set({ error: null });
+      try {
+        await refreshCapture();
+      } catch (error) {
+        set({ error: toAppError(error) });
       }
     },
 

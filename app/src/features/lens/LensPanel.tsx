@@ -7,7 +7,7 @@ import { ErrorNotice } from "../../shared/ui/ErrorNotice";
 import { LineItem } from "./LineItem";
 import { ReplyBox } from "./ReplyBox";
 import type { PanelSide } from "./useLensLayout";
-import { useLensStore, type LensRect } from "./useLensStore";
+import { REFRESH_OPTIONS, useLensStore, type LensRect } from "./useLensStore";
 
 /** 取景框旁的面板：场景 → 开始/停止 → 识别到的句子（点哪句翻哪句）→ 我的回复。可放在取景区左边或右边。 */
 export function LensPanel({
@@ -66,6 +66,24 @@ export function LensPanel({
               {t("lens.start")}
             </Button>
           )}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <span className="shrink-0">{t("lens.refresh")}</span>
+          <select
+            className="input py-1 text-xs"
+            value={store.refreshMs ?? "manual"}
+            onChange={(e) => store.setRefreshMs(e.target.value === "manual" ? null : Number(e.target.value))}
+            title={t("lens.refreshHint")}
+          >
+            {REFRESH_OPTIONS.map((ms) => (
+              <option key={ms ?? "manual"} value={ms ?? "manual"}>
+                {ms === null ? t("lens.refreshManual") : t("lens.refreshEvery", { seconds: ms / 1000 })}
+              </option>
+            ))}
+          </select>
+          <Button onClick={() => void store.refreshNow()} disabled={!running} className="shrink-0">
+            {t("lens.refreshNow")}
+          </Button>
         </div>
         <p className="text-xs text-zinc-500">
           {running

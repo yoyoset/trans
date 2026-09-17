@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use trans_application::capture::{WindowId, WindowInfo};
@@ -105,6 +107,18 @@ pub fn update_capture_region(
     state: State<'_, AppState>,
 ) -> Result<CaptureStatus, CommandError> {
     state.capture.update_region(Rect { x, y, width, height })
+}
+
+/// 设置刷新节奏：`interval_ms` 为空是手动模式。改完立即生效，不打断正在进行的识别。
+#[tauri::command]
+pub fn set_capture_interval(interval_ms: Option<u64>, state: State<'_, AppState>) {
+    state.capture.set_interval(interval_ms.map(Duration::from_millis));
+}
+
+/// 马上识别一轮（手动模式靠它读取新消息，定时模式下也可以不等间隔）。
+#[tauri::command]
+pub fn refresh_capture(state: State<'_, AppState>) -> Result<(), CommandError> {
+    state.capture.refresh_now()
 }
 
 #[tauri::command]

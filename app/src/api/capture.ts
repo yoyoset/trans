@@ -25,6 +25,13 @@ export const startCapture = (source: CaptureSourceArgs, presetId: string) =>
 
 export const stopCapture = () => call<CaptureStatus>("stop_capture");
 
+/** 刷新节奏：传 null 为手动模式，只在调用 refreshCapture 时识别。 */
+export const setCaptureInterval = (intervalMs: number | null) =>
+  call<void>("set_capture_interval", { intervalMs });
+
+/** 马上识别一轮。 */
+export const refreshCapture = () => call<void>("refresh_capture");
+
 /** 识别中挪动取景框或改布局后同步新区域；不清空已识别的句子。 */
 export const updateCaptureRegion = (rect: { x: number; y: number; width: number; height: number }) =>
   call<CaptureStatus>("update_capture_region", rect);
