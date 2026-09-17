@@ -20,18 +20,26 @@ export function LensPanel({
   side: PanelSide;
 }) {
   const { t } = useTranslation();
-  const store = useLensStore();
+  // 逐项订阅：只订阅面板自己要显示的字段，某一句翻译状态变化不会连带面板头部重渲染。
+  const presets = useLensStore((s) => s.presets);
+  const presetId = useLensStore((s) => s.presetId);
+  const status = useLensStore((s) => s.status);
+  const lines = useLensStore((s) => s.lines);
+  const busy = useLensStore((s) => s.busy);
+  const error = useLensStore((s) => s.error);
+  const refreshMs = useLensStore((s) => s.refreshMs);
+  const { setPreset, setRefreshMs, refreshNow, start: startCapture, stop, clearLines } = useLensStore.getState();
   const listEnd = useRef<HTMLDivElement>(null);
-  const running = store.status?.running != null;
+  const running = status?.running != null;
 
   // 必须用花括号：scrollIntoView 返回值不能交给 React 当清理函数（首次拉起黑屏就是这么来的）。
   useEffect(() => {
     listEnd.current?.scrollIntoView({ behavior: "smooth" });
-  }, [store.lines.length]);
+  }, [lines.length]);
 
   const start = async () => {
     const rect = await captureRect();
-    if (rect) await store.start(rect);
+    if (rect) await startCapture(rect);
   };
 
   return (
@@ -46,23 +54,23 @@ export function LensPanel({
         <div className="flex items-center gap-2">
           <select
             className="input py-1 text-xs"
-            value={store.presetId ?? ""}
-            onChange={(e) => store.setPreset(e.target.value)}
+            value={presetId ?? ""}
+            onChange={(e) => setPreset(e.target.value)}
             disabled={running}
             title={t("lens.presetHint")}
           >
-            {store.presets.map((preset) => (
+            {presets.map((preset) => (
               <option key={preset.id} value={preset.id}>
                 {preset.name}
               </option>
             ))}
           </select>
           {running ? (
-            <Button variant="danger" onClick={() => void store.stop()} disabled={store.busy} className="shrink-0">
+            <Button variant="danger" onClick={() => void stop()} disabled={busy} className="shrink-0">
               {t("lens.stop")}
             </Button>
           ) : (
-            <Button variant="primary" onClick={() => void start()} disabled={store.busy} className="shrink-0">
+            <Button variant="primary" onClick={() => void start()} disabled={busy} className="shrink-0">
               {t("lens.start")}
             </Button>
           )}
@@ -71,8 +79,8 @@ export function LensPanel({
           <span className="shrink-0">{t("lens.refresh")}</span>
           <select
             className="input py-1 text-xs"
-            value={store.refreshMs ?? "manual"}
-            onChange={(e) => store.setRefreshMs(e.target.value === "manual" ? null : Number(e.target.value))}
+            value={refreshMs ?? "manual"}
+            onChange={(e) => setRefreshMs(e.target.value === "manual" ? null : Number(e.target.value))}
             title={t("lens.refreshHint")}
           >
             {REFRESH_OPTIONS.map((ms) => (
@@ -81,30 +89,30 @@ export function LensPanel({
               </option>
             ))}
           </select>
-          <Button onClick={() => void store.refreshNow()} disabled={!running} className="shrink-0">
+          <Button onClick={() => void refreshNow()} disabled={!running} className="shrink-0">
             {t("lens.refreshNow")}
           </Button>
         </div>
         <p className="text-xs text-zinc-500">
           {running
-            ? t("lens.seen", { count: store.status?.last_seen ?? 0 })
+            ? t("lens.seen", { count: status?.last_seen ?? 0 })
             : t("lens.idleHint")}
         </p>
-        {store.status?.last_error && <p className="text-xs text-amber-300">{store.status.last_error}</p>}
-        {store.error && <ErrorNotice error={store.error} />}
+        {status?.last_error && <p className="text-xs text-amber-300">{status.last_error}</p>}
+        {error && <ErrorNotice error={error} />}
       </header>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
-        {store.lines.length === 0 ? (
+        {lines.length === 0 ? (
           <p className="py-6 text-center text-xs text-zinc-500">{running ? t("lens.waiting") : t("lens.empty")}</p>
         ) : (
           <>
             <div className="flex justify-end">
-              <button type="button" className="text-xs text-zinc-500 hover:text-zinc-300" onClick={store.clearLines}>
+              <button type="button" className="text-xs text-zinc-500 hover:text-zinc-300" onClick={clearLines}>
                 {t("lens.clear")}
               </button>
             </div>
-            {store.lines.map((line) => (
+            {lines.map((line) => (
               <LineItem key={line.id} line={line} />
             ))}
           </>

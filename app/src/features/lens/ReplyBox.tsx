@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice } from "../../shared/ui/ErrorNotice";
@@ -9,7 +9,7 @@ import { useLensStore } from "./useLensStore";
 const DEBOUNCE_MS = 600;
 
 /** 我的回复：打中文，停一下自动出英文；可复制，也可在线校对。 */
-export function ReplyBox() {
+export const ReplyBox = memo(function ReplyBox() {
   const { t } = useTranslation();
   const reply = useLensStore((s) => s.reply);
   const translateReply = useLensStore((s) => s.translateReply);
@@ -66,4 +66,4 @@ export function ReplyBox() {
       )}
     </footer>
   );
-}
+});

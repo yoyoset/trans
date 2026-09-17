@@ -1,11 +1,15 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice } from "../../shared/ui/ErrorNotice";
 import { IssueList } from "../composer/IssueList";
 import { useLensStore, type Line } from "./useLensStore";
 
-/** 识别到的一句对方消息：原文 → 点「翻译」出中文 → 不满意再点「在线校对」。 */
-export function LineItem({ line }: { line: Line }) {
+/**
+ * 识别到的一句对方消息：原文 → 点「翻译」出中文 → 不满意再点「在线校对」。
+ * memo：store 只替换被修改的那一句，其余句子引用不变，翻译一句时不必重渲染整个列表。
+ */
+export const LineItem = memo(function LineItem({ line }: { line: Line }) {
   const { t } = useTranslation();
   const translateLine = useLensStore((s) => s.translateLine);
   const calibrateLine = useLensStore((s) => s.calibrateLine);
@@ -51,4 +55,4 @@ export function LineItem({ line }: { line: Line }) {
       </div>
     </article>
   );
-}
+});
