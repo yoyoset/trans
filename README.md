@@ -47,6 +47,12 @@ scripts/check.sh && git commit
 
 依次执行 `cargo fmt --check`、`clippy -D warnings`、`cargo test --workspace`、前端 `vitest`、`tsc` + `vite build`。
 
+依赖升级后、发布前另跑依赖安全检查（需联网，首次先 `cargo install cargo-audit --locked`）：
+
+```bash
+scripts/audit.sh
+```
+
 需要真实环境的测试默认忽略，按需手动运行：
 
 ```bash

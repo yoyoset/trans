@@ -1,0 +1,4 @@
+# 行尾统一：仓库内一律 LF。shell 脚本在工作区也强制 LF——否则 core.autocrlf=true 的 Windows 检出
+# 会把它们变成 CRLF，在 Linux / CI 上执行时报 "$'\r': command not found"。
+* text=auto
+*.sh text eol=lf
