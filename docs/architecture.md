@@ -322,7 +322,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 ### 已知问题（显式列出，暂不处理）
 
 1. ~~llama-server 未绑定 Job Object~~：已绑定（KILL_ON_JOB_CLOSE）。实测强杀 trans-app 后 llama-server（约 4.9 GB 内存）随之退出。
-2. **llama-server 输出被丢弃**：启动失败只能看到退出码。应接入日志文件。
+2. ~~llama-server 输出被丢弃~~：已写入 `%LOCALAPPDATA%\com.trans.chat\logs\llama-server.log`（每次启动覆盖），启动失败时错误信息附日志末尾 6 行和日志路径。遗留：主窗口引擎状态徽标只截断显示首行，完整信息要悬停查看——是否加详情展开属于界面取舍，暂不改。
 3. **跟随窗口模式截图仍是每次新建会话**（首帧约 600 ms）。取景框已改为常驻会话（见上方实测），跟随窗口模式暂无界面入口，恢复入口时再照做。
 4. **在线默认模型名 `deepseek-v4-flash` 未经官方 API 实测**：取自 opencode 的模型目录，额度恢复后需验证。
 5. **API Key 在内存中未清零**。

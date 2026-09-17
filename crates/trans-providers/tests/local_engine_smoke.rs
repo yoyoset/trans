@@ -26,6 +26,29 @@ fn env_path(name: &str) -> PathBuf {
     PathBuf::from(std::env::var(name).unwrap_or_else(|_| panic!("set {name} to run this smoke test")))
 }
 
+/// 模型文件损坏时，错误信息里要带上 llama-server 自己的报错，而不是只有退出码。
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a real llama-server binary"]
+async fn startup_failure_reports_the_server_log_tail() {
+    let dir = tempfile::tempdir().unwrap();
+    let model_path = dir.path().join("broken.gguf");
+    std::fs::write(&model_path, b"this is not a gguf file").unwrap();
+    let log_path = dir.path().join("logs").join("llama-server.log");
+    let config = LlamaServerConfig {
+        server_path: env_path("TRANS_LLAMA_SERVER"),
+        model_path,
+        threads: 2,
+        context_size: 512,
+        port: 18766,
+    };
+
+    let error = LlamaServer::start(config, Some(&log_path), Duration::from_secs(30)).await.err().expect("must fail");
+    println!("{error}");
+    let message = error.to_string();
+    assert!(message.contains("日志末尾"), "error should quote the log: {message}");
+    assert!(message.contains(&log_path.display().to_string()));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a real llama-server binary and GGUF model"]
 async fn translates_through_a_real_local_llama_server() {
@@ -38,8 +61,9 @@ async fn translates_through_a_real_local_llama_server() {
     };
 
     let started = Instant::now();
-    let server =
-        LlamaServer::start(config.clone(), Duration::from_secs(180)).await.expect("llama-server should become healthy");
+    let server = LlamaServer::start(config.clone(), None, Duration::from_secs(180))
+        .await
+        .expect("llama-server should become healthy");
     println!("llama-server ready in {} ms", started.elapsed().as_millis());
 
     let engine = OpenAiCompatEngine::new(OpenAiCompatConfig {

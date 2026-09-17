@@ -28,6 +28,15 @@ pub struct AppState {
     pub startup_warnings: Mutex<Vec<String>>,
 }
 
+/// 拿不到日志目录时不写日志，不影响启动。
+fn local_engine_log(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path()
+        .app_log_dir()
+        .inspect_err(|error| tracing::warn!(%error, "no log directory; llama-server output will be discarded"))
+        .ok()
+        .map(|dir| dir.join("llama-server.log"))
+}
+
 impl AppState {
     pub fn initialize(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let store = SettingsStore::new(app.path().app_config_dir()?.join("settings.json"));
@@ -50,7 +59,7 @@ impl AppState {
             settings_store: store,
             secrets: platform_secret_store(),
             service,
-            engines: EngineManager::new(app.clone()),
+            engines: EngineManager::new(app.clone(), local_engine_log(app)),
             capture: CaptureSession::new(app.clone(), capture_pipeline()),
             presets: trans_presets::builtin_presets()?,
             startup_warnings: Mutex::new(warnings),

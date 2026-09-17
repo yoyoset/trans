@@ -2,10 +2,11 @@
 //!
 //! 回收：正常退出靠 `kill_on_drop`；Windows 上另外绑定 Job Object，本进程被强杀或崩溃时也不会残留。
 //!
-//! 已知未做（见 docs/architecture.md「已知问题」）：
-//! - llama-server 的输出被丢弃，启动失败时只能给出退出码，看不到它自己的报错。
+//! 日志：llama-server 的 stdout/stderr 写入调用方给的日志文件，每次启动覆盖（大小不会无限增长）。
+//! 启动失败时从日志末尾摘几行放进错误信息，用户不用自己翻日志就能看到原因。
 
-use std::path::PathBuf;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
@@ -53,9 +54,15 @@ impl LlamaServerConfig {
     }
 }
 
+/// 启动失败时，错误信息里最多带日志末尾几行。
+const FAILURE_LOG_LINES: usize = 6;
+/// 单行过长（例如一整段张量信息）时截断，避免错误提示刷屏。
+const FAILURE_LOG_LINE_CHARS: usize = 200;
+
 pub struct LlamaServer {
     child: Child,
     config: LlamaServerConfig,
+    log_path: Option<PathBuf>,
     /// 和 `child` 同生命周期；放在 `child` 之后，drop 时先由 `kill_on_drop` 正常结束。
     #[cfg(windows)]
     _job: Option<crate::job_object::KillOnCloseJob>,
@@ -63,7 +70,12 @@ pub struct LlamaServer {
 
 impl LlamaServer {
     /// 启动并等待 `/health` 返回 200。模型加载期间 `/health` 返回 503，属于正常等待。
-    pub async fn start(config: LlamaServerConfig, ready_timeout: Duration) -> Result<Self, ProviderError> {
+    /// `log_path` 为空时丢弃输出（测试用）。
+    pub async fn start(
+        config: LlamaServerConfig,
+        log_path: Option<&Path>,
+        ready_timeout: Duration,
+    ) -> Result<Self, ProviderError> {
         for (label, path) in [("llama-server 程序", &config.server_path), ("模型文件", &config.model_path)] {
             if !path.is_file() {
                 return Err(ProviderError::Unavailable(format!("{label}不存在：{}", path.display())));
@@ -71,7 +83,8 @@ impl LlamaServer {
         }
 
         let mut command = Command::new(&config.server_path);
-        command.args(config.args()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true);
+        let (stdout, stderr) = log_output(log_path);
+        command.args(config.args()).stdin(Stdio::null()).stdout(stdout).stderr(stderr).kill_on_drop(true);
         #[cfg(windows)]
         {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -85,6 +98,7 @@ impl LlamaServer {
         let mut server = Self {
             child,
             config,
+            log_path: log_path.map(Path::to_path_buf),
             #[cfg(windows)]
             _job,
         };
@@ -100,10 +114,26 @@ impl LlamaServer {
         loop {
             let exited = self.child.try_wait().map_err(|e| ProviderError::Unavailable(e.to_string()))?;
             if let Some(status) = exited {
-                return Err(ProviderError::Unavailable(format!(
+                let mut message = format!(
                     "llama-server 启动后退出（{status}），请检查模型文件是否完整、端口 {} 是否被占用",
                     self.config.port
-                )));
+                );
+                if let Some(path) = &self.log_path {
+                    let log = std::fs::read(path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
+                    if let Some(tail) = log.ok().as_deref().and_then(log_tail) {
+                        message.push_str(&format!(
+                            "
+日志末尾：
+{tail}"
+                        ));
+                    }
+                    message.push_str(&format!(
+                        "
+完整日志：{}",
+                        path.display()
+                    ));
+                }
+                return Err(ProviderError::Unavailable(message));
             }
             let healthy = http
                 .get(&url)
@@ -130,6 +160,45 @@ impl LlamaServer {
             tracing::warn!(%error, "failed to stop llama-server");
         }
     }
+}
+
+/// 打开日志文件作为子进程的 stdout 和 stderr；打不开就丢弃输出，不影响启动。
+fn log_output(log_path: Option<&Path>) -> (Stdio, Stdio) {
+    let opened = log_path.map(|path| {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let file = File::create(path)?;
+        Ok::<_, std::io::Error>((file.try_clone()?, file))
+    });
+    match opened {
+        Some(Ok((stdout, stderr))) => (stdout.into(), stderr.into()),
+        Some(Err(error)) => {
+            tracing::warn!(%error, "cannot open llama-server log; its output will be discarded");
+            (Stdio::null(), Stdio::null())
+        }
+        None => (Stdio::null(), Stdio::null()),
+    }
+}
+
+/// 日志末尾几行非空内容，过长的行截断。日志为空时返回 `None`。
+fn log_tail(log: &str) -> Option<String> {
+    let lines: Vec<&str> = log.lines().map(str::trim_end).filter(|line| !line.trim().is_empty()).collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let tail = lines[lines.len().saturating_sub(FAILURE_LOG_LINES)..]
+        .iter()
+        .map(|line| match line.char_indices().nth(FAILURE_LOG_LINE_CHARS) {
+            Some((cut, _)) => format!("{}…", &line[..cut]),
+            None => (*line).to_owned(),
+        })
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        );
+    Some(tail)
 }
 
 /// 绑定失败不影响使用，只是回到"强杀时可能残留"的状态，所以记日志而不是报错。
@@ -165,11 +234,48 @@ mod tests {
         assert_eq!(config().base_url(), "http://127.0.0.1:8765");
     }
 
+    #[test]
+    fn log_tail_keeps_last_non_empty_lines_and_truncates_long_ones() {
+        let long = "x".repeat(FAILURE_LOG_LINE_CHARS + 50);
+        let log = format!(
+            "a
+b
+
+c
+d
+e
+f
+{long}
+gguf_init: failed to open model
+
+"
+        );
+        let tail = log_tail(&log).unwrap();
+        let lines: Vec<&str> = tail.lines().collect();
+        assert_eq!(lines.len(), FAILURE_LOG_LINES);
+        assert_eq!(lines[0], "d");
+        assert!(lines[4].ends_with('…') && lines[4].chars().count() == FAILURE_LOG_LINE_CHARS + 1);
+        assert_eq!(lines[5], "gguf_init: failed to open model");
+    }
+
+    #[test]
+    fn log_tail_of_empty_log_is_none() {
+        assert_eq!(log_tail(""), None);
+        assert_eq!(
+            log_tail(
+                "
+  
+"
+            ),
+            None
+        );
+    }
+
     #[tokio::test]
     async fn missing_files_are_reported_before_spawning() {
         let mut cfg = config();
         cfg.server_path = PathBuf::from(r"Z:\definitely\missing\llama-server.exe");
-        let err = LlamaServer::start(cfg, Duration::from_secs(1)).await.err().unwrap();
+        let err = LlamaServer::start(cfg, None, Duration::from_secs(1)).await.err().unwrap();
         assert!(matches!(err, ProviderError::Unavailable(msg) if msg.contains("llama-server 程序不存在")));
     }
 }

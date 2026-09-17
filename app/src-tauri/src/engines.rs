@@ -1,6 +1,6 @@
 //! 引擎生命周期：按设置创建本地/在线引擎，替换进翻译服务，并把状态推送给前端。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, PoisonError, RwLock};
 use std::time::Duration;
 
@@ -45,11 +45,19 @@ pub struct EngineManager {
     apply_lock: Mutex<()>,
     local: Mutex<Option<LlamaServer>>,
     status: RwLock<EngineStatus>,
+    /// llama-server 输出写到这里，每次启动覆盖。
+    local_log: Option<PathBuf>,
 }
 
 impl EngineManager {
-    pub fn new(app: AppHandle) -> Self {
-        Self { app, apply_lock: Mutex::new(()), local: Mutex::new(None), status: RwLock::new(EngineStatus::default()) }
+    pub fn new(app: AppHandle, local_log: Option<PathBuf>) -> Self {
+        Self {
+            app,
+            apply_lock: Mutex::new(()),
+            local: Mutex::new(None),
+            status: RwLock::new(EngineStatus::default()),
+            local_log,
+        }
     }
 
     pub fn status(&self) -> EngineStatus {
@@ -104,7 +112,7 @@ impl EngineManager {
                 old.stop().await;
             }
             self.publish(|status| status.local = EngineState::Starting);
-            match LlamaServer::start(config.clone(), LOCAL_READY_TIMEOUT).await {
+            match LlamaServer::start(config.clone(), self.local_log.as_deref(), LOCAL_READY_TIMEOUT).await {
                 Ok(server) => *running = Some(server),
                 Err(error) => return (None, EngineState::Failed { message: error.to_string() }, false),
             }
