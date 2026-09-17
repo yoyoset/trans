@@ -1,7 +1,8 @@
 //! 本地 llama-server 子进程管理。
 //!
+//! 回收：正常退出靠 `kill_on_drop`；Windows 上另外绑定 Job Object，本进程被强杀或崩溃时也不会残留。
+//!
 //! 已知未做（见 docs/architecture.md「已知问题」）：
-//! - 没有绑定 Windows Job Object：本进程被强杀时 llama-server 可能残留。正常退出时由 `kill_on_drop` 回收。
 //! - llama-server 的输出被丢弃，启动失败时只能给出退出码，看不到它自己的报错。
 
 use std::path::PathBuf;
@@ -55,6 +56,9 @@ impl LlamaServerConfig {
 pub struct LlamaServer {
     child: Child,
     config: LlamaServerConfig,
+    /// 和 `child` 同生命周期；放在 `child` 之后，drop 时先由 `kill_on_drop` 正常结束。
+    #[cfg(windows)]
+    _job: Option<crate::job_object::KillOnCloseJob>,
 }
 
 impl LlamaServer {
@@ -76,7 +80,14 @@ impl LlamaServer {
         let child = command.spawn().map_err(|e| ProviderError::Unavailable(format!("启动 llama-server 失败：{e}")))?;
 
         tracing::info!(model = %config.model_path.display(), port = config.port, threads = config.threads, "llama-server starting");
-        let mut server = Self { child, config };
+        #[cfg(windows)]
+        let _job = bind_to_this_process(&child);
+        let mut server = Self {
+            child,
+            config,
+            #[cfg(windows)]
+            _job,
+        };
         server.wait_ready(ready_timeout).await?;
         tracing::info!("llama-server ready");
         Ok(server)
@@ -119,6 +130,15 @@ impl LlamaServer {
             tracing::warn!(%error, "failed to stop llama-server");
         }
     }
+}
+
+/// 绑定失败不影响使用，只是回到"强杀时可能残留"的状态，所以记日志而不是报错。
+#[cfg(windows)]
+fn bind_to_this_process(child: &Child) -> Option<crate::job_object::KillOnCloseJob> {
+    let handle = child.raw_handle()?;
+    crate::job_object::KillOnCloseJob::adopt(handle.cast())
+        .inspect_err(|error| tracing::warn!(%error, "llama-server not bound to a job object; it may outlive a crash"))
+        .ok()
 }
 
 #[cfg(test)]
