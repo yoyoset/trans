@@ -17,8 +17,9 @@ use trans_domain::region::{AnchoredRegion, RegionError};
 
 use crate::capture::{CaptureError, OcrEngine, OcrError, ScreenCapture, WindowCapture, WindowId, WindowInfo};
 
-/// 判重时回看多少条消息。聊天滚动很快，几十条足够，也不会无限增长。
-const RECONCILER_CAPACITY: usize = 60;
+/// 判重历史保留多少条。只在对不齐上一帧时才用（例如聊天被别的窗口挡住后再露出来）：
+/// 挡住期间识别到的其它文字也会进历史，留得太少会把聊天里的旧消息挤掉、露出来时重复显示。
+const RECONCILER_CAPACITY: usize = 150;
 
 /// 画面从哪来。
 #[derive(Debug, Clone, PartialEq)]
