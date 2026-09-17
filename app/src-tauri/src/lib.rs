@@ -4,6 +4,7 @@ mod capture_session;
 mod commands;
 mod engines;
 mod error;
+mod logging;
 mod refresh;
 mod settings_store;
 mod state;
@@ -11,7 +12,7 @@ mod state;
 use tauri::Manager;
 
 pub fn run() {
-    tracing_subscriber::fmt().with_target(false).init();
+    let logging = logging::Logging::init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -22,7 +23,14 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .setup(move |app| {
+            match app.path().app_log_dir() {
+                Ok(dir) => match logging.attach_file(&dir) {
+                    Ok(path) => tracing::info!(path = %path.display(), "logging to file"),
+                    Err(error) => tracing::warn!(%error, "file logging unavailable"),
+                },
+                Err(error) => tracing::warn!(%error, "no log directory; file logging unavailable"),
+            }
             let state = state::AppState::initialize(app.handle())?;
             app.manage(state);
             state::spawn_apply_engines(app.handle().clone());
