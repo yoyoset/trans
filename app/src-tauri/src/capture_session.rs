@@ -147,10 +147,16 @@ impl CaptureSession {
         self.pipeline.clone().ok_or_else(|| CommandError::new("capture_unsupported", "当前平台不支持识别"))
     }
 
+    /// 状态真的变了才推送。识别每轮都会写一次状态，画面没变时内容相同，
+    /// 照推会让面板每轮整体重渲染一次。
     fn update_status(&self, change: impl FnOnce(&mut CaptureStatus)) {
         let snapshot = {
             let mut status = self.status.write().unwrap_or_else(PoisonError::into_inner);
+            let before = status.clone();
             change(&mut status);
+            if *status == before {
+                return;
+            }
             status.clone()
         };
         if let Err(error) = self.app.emit(CAPTURE_STATUS_EVENT, snapshot) {
