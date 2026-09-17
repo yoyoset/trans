@@ -39,14 +39,13 @@ npx tauri dev
 
 ## 质量门禁
 
-提交前必须全部通过：
+提交前必须全部通过。一条命令跑完（git bash），任何一步失败立即停止并返回非零：
 
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cd app && npm run build
+scripts/check.sh && git commit
 ```
+
+依次执行 `cargo fmt --check`、`clippy -D warnings`、`cargo test --workspace`、前端 `tsc` + `vite build`。
 
 需要真实环境的测试默认忽略，按需手动运行：
 

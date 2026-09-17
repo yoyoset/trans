@@ -243,7 +243,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 | 状态 | 不用全局可变状态；配置和依赖通过构造注入 |
 | 错误 | 库 crate 用 thiserror 类型化错误；UI 展示分两层：人话摘要 + 可展开的技术详情 |
 | 前端 | 按 feature 分目录；只有 `api/` 能调用 invoke；每个 feature 自己一个 zustand store |
-| 质量门禁 | `cargo fmt`、`clippy -D warnings`、`cargo test`、`tsc --noEmit`、eslint 全绿才提交 |
+| 质量门禁 | `scripts/check.sh`：`cargo fmt`、`clippy -D warnings`、`cargo test`、`tsc` + `vite build` 全绿才提交（eslint 尚未接入，见 §13） |
 | 决策记录 | 每个关键决策写一份 ADR（背景、选项、实测数据、结论） |
 
 ---
@@ -329,6 +329,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 6. **框选区域还只能用预设里的值**：拖动框选的界面没做，目前识别区域来自区域预设（Messenger 网页版 / 暗黑2 聊天框），对不准只能改预设 JSON。
 7. **输入法候选框会被识别**：它是系统独立窗口，无法排除出截图，浮到取景区上就会被读进来。目前的应对是刷新节奏可选「手动」（存在取景框本地偏好里，不在 settings.json）；打字时自动暂停识别尚未做。
 8. **尚未实现**：发送管道（SendJob 状态机）、面板贴靠目标窗口、日志落盘、自动更新。
-9. **前端没有自动化测试**；业务规则都在 Rust 侧并有单元测试，前端目前只有类型检查。
+9. **前端没有自动化测试，也没有接入 eslint**；业务规则都在 Rust 侧并有单元测试，前端目前只有类型检查。
+10. **没有 CI**：仓库还没有远程，质量门只在本地由 `scripts/check.sh` 执行；发布到 GitHub 时再加 workflow（届时用 windows runner，trans-win 只在 Windows 编译）。
 - CLI Agent 包装层的延迟可能不满足"边打边出" → 靠 Draft/Final 分层 + 本地模型兜底。
 - 全屏独占游戏下无法停靠面板、截屏不可靠 → 降级为热键呼出 + CopyOnly。
