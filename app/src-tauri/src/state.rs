@@ -11,7 +11,7 @@ use trans_application::settings::AppSettings;
 use trans_presets::RegionPreset;
 
 use crate::capture_session::CaptureSession;
-use crate::engines::EngineManager;
+use crate::engines::{EngineManager, EnginePaths};
 use crate::settings_store::SettingsStore;
 
 /// 凭据管理器里的名字前缀。
@@ -28,13 +28,13 @@ pub struct AppState {
     pub startup_warnings: Mutex<Vec<String>>,
 }
 
-/// 拿不到日志目录时不写日志，不影响启动。
-fn local_engine_log(app: &AppHandle) -> Option<std::path::PathBuf> {
-    app.path()
-        .app_log_dir()
-        .inspect_err(|error| tracing::warn!(%error, "no log directory; llama-server output will be discarded"))
-        .ok()
-        .map(|dir| dir.join("llama-server.log"))
+/// 拿不到目录时对应功能降级（不写引擎日志 / 不能用 opencode），不影响启动。
+fn engine_paths(app: &AppHandle) -> EnginePaths {
+    let path = app.path();
+    EnginePaths {
+        log_dir: path.app_log_dir().inspect_err(|error| tracing::warn!(%error, "no log directory")).ok(),
+        data_dir: path.app_data_dir().inspect_err(|error| tracing::warn!(%error, "no data directory")).ok(),
+    }
 }
 
 impl AppState {
@@ -59,7 +59,7 @@ impl AppState {
             settings_store: store,
             secrets: platform_secret_store(),
             service,
-            engines: EngineManager::new(app.clone(), local_engine_log(app)),
+            engines: EngineManager::new(app.clone(), engine_paths(app)),
             capture: CaptureSession::new(app.clone(), capture_pipeline()),
             presets: trans_presets::builtin_presets()?,
             startup_warnings: Mutex::new(warnings),

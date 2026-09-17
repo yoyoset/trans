@@ -10,14 +10,27 @@ use tokio::sync::{Mutex, MutexGuard};
 use trans_application::ports::{ChatEngine, EngineKind, SecretStore};
 use trans_application::router::EngineSet;
 use trans_application::service::TranslationService;
-use trans_application::settings::{AppSettings, LocalEngineSettings, OnlineEngineSettings};
+use trans_application::settings::{
+    AppSettings, LocalEngineSettings, OnlineChannel, OnlineEngineSettings, OpencodeSettings,
+};
 use trans_providers::llama_server::{LlamaServer, LlamaServerConfig};
 use trans_providers::openai_compat::{OpenAiCompatConfig, OpenAiCompatEngine};
+use trans_providers::opencode::{find_opencode, OpencodeServer, OpencodeServerConfig};
 
 pub const ENGINE_STATUS_EVENT: &str = "engine-status";
 
 /// 4B 模型纯 CPU 加载约 6 s（M0-02）；14B 或多开游戏时会慢得多，留足余量。
 const LOCAL_READY_TIMEOUT: Duration = Duration::from_secs(180);
+
+/// opencode serve 实测约 2.5～3.3 s 就绪；首次运行可能要初始化配置，留足余量。
+const OPENCODE_READY_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// 引擎子进程用到的目录。拿不到时对应功能降级（不写日志 / 不能用 opencode），不影响其它引擎。
+#[derive(Debug, Clone, Default)]
+pub struct EnginePaths {
+    pub log_dir: Option<PathBuf>,
+    pub data_dir: Option<PathBuf>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -44,19 +57,20 @@ pub struct EngineManager {
     app: AppHandle,
     apply_lock: Mutex<()>,
     local: Mutex<Option<LlamaServer>>,
+    opencode: Mutex<Option<OpencodeServer>>,
     status: RwLock<EngineStatus>,
-    /// llama-server 输出写到这里，每次启动覆盖。
-    local_log: Option<PathBuf>,
+    paths: EnginePaths,
 }
 
 impl EngineManager {
-    pub fn new(app: AppHandle, local_log: Option<PathBuf>) -> Self {
+    pub fn new(app: AppHandle, paths: EnginePaths) -> Self {
         Self {
             app,
             apply_lock: Mutex::new(()),
             local: Mutex::new(None),
+            opencode: Mutex::new(None),
             status: RwLock::new(EngineStatus::default()),
-            local_log,
+            paths,
         }
     }
 
@@ -69,9 +83,12 @@ impl EngineManager {
     }
 
     pub async fn apply(&self, settings: &AppSettings, secrets: &dyn SecretStore, service: &TranslationService) {
-        let (online, online_state) = online_engine(&settings.engines.online, secrets);
+        // 两个引擎互不依赖，并行启动：opencode 约 3 s、llama-server 约 6 s，不必排队。
+        let ((online, online_state), (local, local_state, started)) = tokio::join!(
+            self.online_engine(&settings.engines.online, secrets),
+            self.local_engine(&settings.engines.local)
+        );
         self.publish(|status| status.online = online_state);
-        let (local, local_state, started) = self.local_engine(&settings.engines.local).await;
         service.replace_engines(EngineSet { local, online });
         if started {
             // 预热完才报"就绪"，用户的第一句翻译不必替系统提示词预填充多等约 4 s。
@@ -85,6 +102,69 @@ impl EngineManager {
     pub async fn shutdown(&self) {
         if let Some(server) = self.local.lock().await.take() {
             server.stop().await;
+        }
+        self.stop_opencode().await;
+    }
+
+    async fn stop_opencode(&self) {
+        if let Some(server) = self.opencode.lock().await.take() {
+            server.stop().await;
+        }
+    }
+
+    async fn online_engine(
+        &self,
+        settings: &OnlineEngineSettings,
+        secrets: &dyn SecretStore,
+    ) -> (Option<Arc<dyn ChatEngine>>, EngineState) {
+        if !settings.enabled || settings.channel != OnlineChannel::Opencode {
+            // 不用 opencode 时不留着它的后台进程。
+            self.stop_opencode().await;
+        }
+        if !settings.enabled {
+            return (None, EngineState::NotConfigured);
+        }
+        match settings.channel {
+            OnlineChannel::ApiKey => api_key_engine(settings, secrets),
+            OnlineChannel::Opencode => self.opencode_engine(&settings.opencode).await,
+        }
+    }
+
+    /// opencode 程序和工作目录没变时复用正在运行的 serve；只换模型不用重启。
+    async fn opencode_engine(&self, settings: &OpencodeSettings) -> (Option<Arc<dyn ChatEngine>>, EngineState) {
+        let failed = |message: String| (None, EngineState::Failed { message });
+        let program = settings.program.clone().or_else(|| {
+            let appdata = std::env::var_os("APPDATA").map(PathBuf::from);
+            find_opencode(std::env::var("PATH").ok().as_deref(), appdata.as_deref())
+        });
+        let Some(program) = program else {
+            return failed("没有找到 opencode 程序。请先安装 opencode 并登录订阅，或在设置里指定 opencode.exe".into());
+        };
+        let Some(data_dir) = &self.paths.data_dir else {
+            return failed("拿不到应用数据目录，无法启动 opencode".into());
+        };
+        let config = OpencodeServerConfig { program, work_dir: data_dir.join("opencode-work") };
+
+        let mut running = self.opencode.lock().await;
+        if running.as_ref().map(OpencodeServer::config) != Some(&config) {
+            if let Some(old) = running.take() {
+                old.stop().await;
+            }
+            self.publish(|status| status.online = EngineState::Starting);
+            let log = self.paths.log_dir.as_ref().map(|dir| dir.join("opencode.log"));
+            match OpencodeServer::start(config, log.as_deref(), OPENCODE_READY_TIMEOUT).await {
+                Ok(server) => *running = Some(server),
+                Err(error) => return failed(error.to_string()),
+            }
+        }
+        let server = running.as_ref().expect("server was just ensured");
+        let variant = settings.variant.clone().filter(|v| !v.trim().is_empty());
+        match server.engine(&settings.model, variant).await {
+            Ok(engine) => (
+                Some(Arc::new(engine) as Arc<dyn ChatEngine>),
+                EngineState::Ready { model: format!("OpenCode · {}", settings.model) },
+            ),
+            Err(error) => failed(error.to_string()),
         }
     }
 
@@ -112,7 +192,13 @@ impl EngineManager {
                 old.stop().await;
             }
             self.publish(|status| status.local = EngineState::Starting);
-            match LlamaServer::start(config.clone(), self.local_log.as_deref(), LOCAL_READY_TIMEOUT).await {
+            match LlamaServer::start(
+                config.clone(),
+                self.paths.log_dir.as_ref().map(|dir| dir.join("llama-server.log")).as_deref(),
+                LOCAL_READY_TIMEOUT,
+            )
+            .await
+            {
                 Ok(server) => *running = Some(server),
                 Err(error) => return (None, EngineState::Failed { message: error.to_string() }, false),
             }
@@ -144,13 +230,10 @@ impl EngineManager {
     }
 }
 
-fn online_engine(
+fn api_key_engine(
     settings: &OnlineEngineSettings,
     secrets: &dyn SecretStore,
 ) -> (Option<Arc<dyn ChatEngine>>, EngineState) {
-    if !settings.enabled {
-        return (None, EngineState::NotConfigured);
-    }
     let key = match secrets.get(&settings.api_key_secret) {
         Ok(Some(key)) if !key.trim().is_empty() => key,
         Ok(_) => return (None, EngineState::Failed { message: "已启用在线引擎，但还没有填写 API Key".into() }),

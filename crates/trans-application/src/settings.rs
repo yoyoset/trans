@@ -56,10 +56,22 @@ impl Default for LocalEngineSettings {
     }
 }
 
+/// 在线引擎怎么接入。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OnlineChannel {
+    /// 直连 OpenAI 兼容接口，API Key 存凭据管理器。
+    #[default]
+    ApiKey,
+    /// 通过本机 opencode 程序，用它已经登录的订阅（例如 OpenCode Go），不需要在本软件里填 Key。
+    Opencode,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OnlineEngineSettings {
     pub enabled: bool,
+    pub channel: OnlineChannel,
     /// 界面上显示的名字。
     pub display_name: String,
     /// OpenAI 兼容接口地址。换服务商 = 换地址和模型名。
@@ -69,17 +81,37 @@ pub struct OnlineEngineSettings {
     pub reasoning_effort: Option<String>,
     /// API Key 在凭据管理器里的键名；Key 本身永远不写进设置文件。
     pub api_key_secret: String,
+    pub opencode: OpencodeSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OpencodeSettings {
+    /// opencode 程序；为空时自动查找（PATH 里的 opencode.exe，或 npm 全局安装位置）。
+    pub program: Option<PathBuf>,
+    /// `提供方/模型`，和 `opencode models` 列出的一致。
+    pub model: String,
+    /// 推理强度变体。M0-02：OpenRouter 上的 DeepSeek V4 Flash 默认推理 p90 18 s，low 降到 7.7 s。
+    pub variant: Option<String>,
+}
+
+impl Default for OpencodeSettings {
+    fn default() -> Self {
+        Self { program: None, model: "opencode-go/deepseek-v4-flash".into(), variant: Some("low".into()) }
+    }
 }
 
 impl Default for OnlineEngineSettings {
     fn default() -> Self {
         Self {
             enabled: false,
+            channel: OnlineChannel::ApiKey,
             display_name: "DeepSeek".into(),
             base_url: "https://api.deepseek.com".into(),
             model: "deepseek-v4-flash".into(),
             reasoning_effort: None,
             api_key_secret: "online-api-key".into(),
+            opencode: OpencodeSettings::default(),
         }
     }
 }
@@ -168,6 +200,14 @@ mod tests {
         assert_eq!(settings.engines.local.threads, 4);
         assert_eq!(settings.engines.local.port, 8765);
         assert_eq!(settings.engines.routing.outgoing, EnginePreference::Local);
+    }
+
+    #[test]
+    fn settings_saved_before_channels_existed_keep_using_the_api_key() {
+        let settings =
+            load_settings(r#"{"engines": {"online": {"enabled": true, "model": "deepseek-chat"}}}"#).unwrap();
+        assert_eq!(settings.engines.online.channel, OnlineChannel::ApiKey);
+        assert_eq!(settings.engines.online.opencode.model, "opencode-go/deepseek-v4-flash");
     }
 
     #[test]

@@ -24,13 +24,25 @@ export interface LocalEngineSettings {
   port: number;
 }
 
+export type OnlineChannel = "api_key" | "opencode";
+
+export interface OpencodeSettings {
+  /** 为空时自动查找 opencode.exe。 */
+  program: string | null;
+  /** 提供方/模型，例如 opencode-go/deepseek-v4-flash。 */
+  model: string;
+  variant: string | null;
+}
+
 export interface OnlineEngineSettings {
   enabled: boolean;
+  channel: OnlineChannel;
   display_name: string;
   base_url: string;
   model: string;
   reasoning_effort: string | null;
   api_key_secret: string;
+  opencode: OpencodeSettings;
 }
 
 export interface RoutingSettings {

@@ -1,40 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AppError, toAppError } from "../../api/client";
-import { clearOnlineApiKey, hasOnlineApiKey, setOnlineApiKey } from "../../api/settings";
-import { Button } from "../../shared/ui/Button";
-import { ErrorNotice } from "../../shared/ui/ErrorNotice";
-import { Field } from "../../shared/ui/Field";
+import type { OnlineChannel } from "../../api/types";
 import { Section } from "../../shared/ui/Section";
+import { ApiKeyChannel } from "./ApiKeyChannel";
+import { OpencodeChannel } from "./OpencodeChannel";
 import { useSettingsStore } from "./useSettingsStore";
 
-const EFFORTS = ["", "low", "medium", "high"] as const;
+const CHANNELS: Array<{ value: OnlineChannel; label: string }> = [
+  { value: "opencode", label: "settings.online.channelOpencode" },
+  { value: "api_key", label: "settings.online.channelApiKey" },
+];
 
+/** 在线引擎：启用开关 + 接入方式（opencode 订阅 / API Key），各方式的字段在各自组件里。 */
 export function OnlineEngineSection() {
   const { t } = useTranslation();
   const online = useSettingsStore((s) => s.draft?.engines.online);
   const update = useSettingsStore((s) => s.update);
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
-  const [keyInput, setKeyInput] = useState("");
-  const [error, setError] = useState<AppError | null>(null);
-
-  const refreshKey = useCallback(() => {
-    hasOnlineApiKey()
-      .then(setHasKey)
-      .catch((e) => setError(toAppError(e)));
-  }, []);
-  useEffect(refreshKey, [refreshKey]);
-
   if (!online) return null;
-
-  const run = (action: () => Promise<void>) =>
-    void action()
-      .then(() => {
-        setError(null);
-        refreshKey();
-      })
-      .catch((e) => setError(toAppError(e)));
 
   return (
     <Section
@@ -50,69 +32,21 @@ export function OnlineEngineSection() {
         </label>
       }
     >
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={t("settings.online.displayName")}>
-          <input
-            className="input"
-            value={online.display_name}
-            onChange={(e) => update((d) => void (d.engines.online.display_name = e.target.value))}
-          />
-        </Field>
-        <Field label={t("settings.online.model")}>
-          <input
-            className="input font-mono text-xs"
-            value={online.model}
-            onChange={(e) => update((d) => void (d.engines.online.model = e.target.value))}
-          />
-        </Field>
-      </div>
-      <Field label={t("settings.online.baseUrl")}>
-        <input
-          className="input font-mono text-xs"
-          value={online.base_url}
-          onChange={(e) => update((d) => void (d.engines.online.base_url = e.target.value))}
-        />
-      </Field>
-      <Field label={t("settings.online.reasoningEffort")}>
-        <select
-          className="input"
-          value={online.reasoning_effort ?? ""}
-          onChange={(e) => update((d) => void (d.engines.online.reasoning_effort = e.target.value || null))}
-        >
-          {EFFORTS.map((effort) => (
-            <option key={effort} value={effort}>
-              {effort || t("settings.online.reasoningDefault")}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field
-        label={`${t("settings.online.apiKey")}：${hasKey ? t("settings.online.apiKeySaved") : t("settings.online.apiKeyMissing")}`}
-        hint={t("settings.online.keyHint")}
-      >
-        <div className="flex gap-2">
-          <input
-            className="input font-mono text-xs"
-            type="password"
-            autoComplete="off"
-            placeholder={t("settings.online.apiKeyPlaceholder")}
-            value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-          />
-          <Button
-            variant="primary"
-            disabled={keyInput.trim() === ""}
-            onClick={() => run(() => setOnlineApiKey(keyInput).then(() => setKeyInput("")))}
-          >
-            {t("settings.online.saveKey")}
-          </Button>
-          <Button variant="ghost" disabled={!hasKey} onClick={() => run(clearOnlineApiKey)}>
-            {t("settings.online.clearKey")}
-          </Button>
-        </div>
-      </Field>
-      {error && <ErrorNotice error={error} />}
+      <fieldset className="flex flex-wrap items-center gap-4 text-sm">
+        <legend className="mb-1 text-xs text-zinc-400">{t("settings.online.channel")}</legend>
+        {CHANNELS.map((channel) => (
+          <label key={channel.value} className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              name="online-channel"
+              checked={online.channel === channel.value}
+              onChange={() => update((d) => void (d.engines.online.channel = channel.value))}
+            />
+            {t(channel.label)}
+          </label>
+        ))}
+      </fieldset>
+      {online.channel === "opencode" ? <OpencodeChannel /> : <ApiKeyChannel />}
     </Section>
   );
 }

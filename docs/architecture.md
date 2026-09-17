@@ -293,7 +293,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 |---|---|
 | `crates/trans-domain` | 语言与方向、术语表按原文匹配、提示词模板（translate-v4 / calibrate-v1）、模型输出解析、译文机械校验、OCR 中文空格规范化、框选区域锚点解析与反算、**帧裁剪与双线性放大、气泡/行首两种行解析、跨帧去重** |
 | `crates/trans-application` | 端口（`ChatEngine` / `SecretStore` / `WindowCapture` / `OcrEngine`）、按"方向 + 用途"路由引擎、翻译与在线校对用例（上下文按设置截取轮数）、带 schema 版本的设置模型、**读取管道（抓帧 → 裁剪 → 放大 → OCR → 解析 → 去重，另有不影响判重的预览）** |
-| `crates/trans-providers` | OpenAI 兼容客户端（本地 llama-server 与在线 DeepSeek 共用）、llama-server 进程管理（纯 CPU、健康检查、Job Object 绑定、日志文件）、`HF_HOME` 本地模型发现 |
+| `crates/trans-providers` | OpenAI 兼容客户端（本地 llama-server 与在线 API Key 方式共用）、**opencode 订阅通道（常驻 `opencode serve`、随机访问密码、每次请求临时会话并关闭全部工具）**、llama-server 进程管理（纯 CPU、健康检查、Job Object 绑定、日志文件）、`HF_HOME` 本地模型发现 |
 | `crates/trans-presets` | 区域预设 schema 与校验；内置 Messenger 网页版、暗黑2 聊天框 |
 | `crates/trans-win` | Windows.Graphics.Capture 截图（取景框为常驻会话，跟随窗口为单次）、Windows OCR、凭据管理器 |
 | `app/src-tauri` | 组合根、命令、引擎生命周期（配置未变不重启、切换串行化、状态事件推送）、设置文件原子写入与损坏备份、**后台识别会话（手动或定时刷新、只推送新出现的对方消息、状态变化才推送事件）** |
@@ -325,7 +325,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 1. ~~llama-server 未绑定 Job Object~~：已绑定（KILL_ON_JOB_CLOSE）。实测强杀 trans-app 后 llama-server（约 4.9 GB 内存）随之退出。
 2. ~~llama-server 输出被丢弃~~：已写入 `%LOCALAPPDATA%\com.trans.chat\logs\llama-server.log`（每次启动覆盖），启动失败时错误信息附日志末尾 6 行和日志路径。遗留：主窗口引擎状态徽标只截断显示首行，完整信息要悬停查看——是否加详情展开属于界面取舍，暂不改。
 3. **跟随窗口模式截图仍是每次新建会话**（首帧约 600 ms）。取景框已改为常驻会话（见上方实测），跟随窗口模式暂无界面入口，恢复入口时再照做。
-4. **在线默认模型名 `deepseek-v4-flash` 未经官方 API 实测**：取自 opencode 的模型目录，额度恢复后需验证。
+4. **在线通道都没有用真实模型验证过**（按用户要求不花钱测试）：API Key 方式的默认模型名 `deepseek-v4-flash` 取自 opencode 模型目录；opencode 方式只实测了启动、密码访问、建/删会话和未知模型报错，`opencode-go/deepseek-v4-flash` 的实际回复格式、延迟、余额不足时的错误结构待用户首次点「在线校对」时确认。pi 通道未做。
 5. **API Key 在内存中未清零**——评估后决定不做：密钥每次请求都要放进 reqwest 的请求头，HTTP 栈内部会有多份拷贝，只清零我们自己的 `String` 并不能让密钥不留在内存里，属于安慰剂。实际防护是：不写入设置文件（凭据管理器）、`Debug` 输出脱敏（有测试）。
 6. **取景框挡住鼠标**：取景区虽然透明，但仍属于取景框窗口，点不到下面的聊天窗口，需要先挪开框。计划用全局热键切换点击穿透（涉及交互，待用户确认）。跟随窗口模式（按预设锚点随窗口缩放）后端保留，暂无界面入口。
 7. **输入法候选框会被识别**：它是系统独立窗口，无法排除出截图，浮到取景区上就会被读进来。目前的应对是刷新节奏可选「手动」（存在取景框本地偏好里，不在 settings.json）；打字时自动暂停识别尚未做。手动模式下重新打开取景框（主窗口或悬浮按钮）会立即读一轮，离开期间的新消息不会漏看。
