@@ -128,3 +128,14 @@ fn times_screen_grab_and_ocr_separately() {
         std::thread::sleep(std::time::Duration::from_millis(900));
     }
 }
+
+/// 本机装了哪些 OCR 语言。没装对应语言时，框里是那种文字也一个字都读不出来。
+#[test]
+#[ignore = "reports the OCR languages installed on this machine"]
+fn lists_installed_ocr_languages() {
+    use trans_application::capture::OcrEngine;
+
+    let langs = WindowsOcr.available_languages().expect("language list is available");
+    println!("installed OCR languages: {:?}", langs.iter().map(trans_domain::lang::Lang::as_str).collect::<Vec<_>>());
+    assert!(!langs.is_empty(), "Windows should ship at least one OCR language");
+}

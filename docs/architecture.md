@@ -294,7 +294,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 | `crates/trans-domain` | 语言与方向、术语表按原文匹配、提示词模板（translate-v4 / calibrate-v1）、模型输出解析、译文机械校验、OCR 中文空格规范化、框选区域锚点解析与反算、**帧裁剪与双线性放大、气泡/行首两种行解析、跨帧去重** |
 | `crates/trans-application` | 端口（`ChatEngine` / `SecretStore` / `WindowCapture` / `OcrEngine`）、按"方向 + 用途"路由引擎、翻译与在线校对用例（上下文按设置截取轮数）、带 schema 版本的设置模型、**读取管道（抓帧 → 裁剪 → 放大 → OCR → 解析 → 去重，另有不影响判重的预览）** |
 | `crates/trans-providers` | OpenAI 兼容客户端（本地 llama-server 与在线 API Key 方式共用）、**opencode 订阅通道（常驻 `opencode serve`、随机访问密码、每次请求临时会话并关闭全部工具）**、llama-server 进程管理（纯 CPU、健康检查、Job Object 绑定、日志文件）、`HF_HOME` 本地模型发现 |
-| `crates/trans-presets` | 区域预设 schema 与校验；内置 Messenger 网页版、暗黑2 聊天框 |
+| `crates/trans-presets` | 区域预设 schema 与校验；内置**通用（整块读取）**、Messenger 网页版、暗黑2 聊天框 |
 | `crates/trans-win` | Windows.Graphics.Capture 截图（取景框为常驻会话，跟随窗口为单次）、Windows OCR、凭据管理器 |
 | `app/src-tauri` | 组合根、命令、引擎生命周期（配置未变不重启、切换串行化、状态事件推送）、设置文件原子写入与损坏备份、**后台识别会话（手动或定时刷新、只推送新出现的对方消息、状态变化才推送事件）** |
 | `app/src` | 翻译面板（对方消息 / 我的回复 / 在线校对 / 校验提示）、**取景框窗口（透明可拖动缩放的取景区 + 侧面板：场景、刷新节奏、识别到的句子点选翻译、回复翻译；面板左右可换、宽度可拖）**、设置面板（本地模型、在线引擎、按方向偏好、校对上下文轮数） |
@@ -328,6 +328,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 4. **在线通道都没有用真实模型验证过**（按用户要求不花钱测试）：API Key 方式的默认模型名 `deepseek-v4-flash` 取自 opencode 模型目录；opencode 方式只实测了启动、密码访问、建/删会话和未知模型报错，`opencode-go/deepseek-v4-flash` 的实际回复格式、延迟、余额不足时的错误结构待用户首次点「在线校对」时确认。pi 通道未做。
 5. **API Key 在内存中未清零**——评估后决定不做：密钥每次请求都要放进 reqwest 的请求头，HTTP 栈内部会有多份拷贝，只清零我们自己的 `String` 并不能让密钥不留在内存里，属于安慰剂。实际防护是：不写入设置文件（凭据管理器）、`Debug` 输出脱敏（有测试）。
 6. **取景框挡住鼠标**：取景区虽然透明，但仍属于取景框窗口，点不到下面的聊天窗口，需要先挪开框。计划用全局热键切换点击穿透（涉及交互，待用户确认）。跟随窗口模式（按预设锚点随窗口缩放）后端保留，暂无界面入口。
+13. **识别语言要手动选对**：Windows OCR 按语言建引擎，语言不对就一个字也读不出来（实测本机装了 en-us、zh-hans-cn）。取景框面板可选语言，默认用设置里的"对方语言"；没做按内容自动判断语言。
 7. **输入法候选框会被识别**：它是系统独立窗口，无法排除出截图，浮到取景区上就会被读进来。目前的应对是刷新节奏可选「手动」（存在取景框本地偏好里，不在 settings.json）；打字时自动暂停识别尚未做。手动模式下重新打开取景框（主窗口或悬浮按钮）会立即读一轮，离开期间的新消息不会漏看。
 12. **悬浮按钮的窗口比图标大**：Windows 不让无边框窗口低于约 135 px 宽（实测 minWidth、显示后 set_size 都无效），所以窗口保持 136×56，再用 `SetWindowRgn` 裁成直径 44 的圆——圆外不显示也不挡鼠标——Windows 对无边框窗口有约 135 px 的最小宽度，实测 minWidth、显示后 set_size 都缩不回去。
 8. **尚未实现**：发送管道（SendJob 状态机）、面板贴靠目标窗口、自动更新。（日志已落盘：应用 `trans.log` + 上一次运行的 `trans.previous.log`，llama-server `llama-server.log`，均在 `%LOCALAPPDATA%m.trans.chatogs`。）

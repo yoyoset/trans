@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import {
   getCaptureStatus,
+  listOcrLanguages,
   onCapturedLines,
   onCaptureStatus,
   refreshCapture,
@@ -15,6 +16,17 @@ import type { CaptureStatus, PresetSummary, TranslationOutcome, Turn } from "../
 
 /** 面板里最多保留多少句，超出丢最早的，长时间识别也不会无限增长。 */
 export const MAX_LINES = 100;
+
+const LANG_STORAGE_KEY = "trans.lens.ocrLang";
+
+/** 读上次选的识别语言；没选过返回 null（用设置里的"对方语言"）。 */
+function loadLang(): string | null {
+  try {
+    return localStorage.getItem(LANG_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 /** 刷新节奏选项（毫秒）；null 为手动。 */
 export const REFRESH_OPTIONS: Array<number | null> = [null, 1000, 2000, 3000, 5000, 10000];
@@ -81,9 +93,14 @@ interface LensState {
   error: AppError | null;
   /** 刷新间隔（毫秒），null 为手动。 */
   refreshMs: number | null;
+  /** 系统装了哪些 OCR 语言。 */
+  languages: string[];
+  /** 选定的识别语言；null 表示用设置里的"对方语言"。 */
+  lang: string | null;
   /** 加载场景列表并订阅识别推送；返回取消订阅函数。 */
   init: () => () => void;
   setPreset: (id: string) => void;
+  setLang: (lang: string | null) => void;
   start: (rect: LensRect) => Promise<void>;
   stop: () => Promise<void>;
   setRefreshMs: (value: number | null) => void;
@@ -124,6 +141,8 @@ export const useLensStore = create<LensState>((set, get) => {
     busy: false,
     error: null,
     refreshMs: loadRefreshMs(),
+    languages: [],
+    lang: loadLang(),
 
     init: () => {
       let disposed = false;
@@ -155,6 +174,9 @@ export const useLensStore = create<LensState>((set, get) => {
       listPresets()
         .then((presets) => !disposed && set((state) => ({ presets, presetId: state.presetId ?? presets[0]?.id ?? null })))
         .catch((error) => set({ error: toAppError(error) }));
+      listOcrLanguages()
+        .then((languages) => !disposed && set({ languages }))
+        .catch((error) => console.error("list_ocr_languages failed", error));
       setCaptureInterval(get().refreshMs).catch((error) => set({ error: toAppError(error) }));
       getCaptureStatus()
         .then((status) => !disposed && set({ status }))
@@ -168,6 +190,16 @@ export const useLensStore = create<LensState>((set, get) => {
 
     setPreset: (id) => set({ presetId: id }),
 
+    setLang: (lang) => {
+      set({ lang });
+      try {
+        if (lang === null) localStorage.removeItem(LANG_STORAGE_KEY);
+        else localStorage.setItem(LANG_STORAGE_KEY, lang);
+      } catch {
+        // 只是偏好，存不下就下次重新选。
+      }
+    },
+
     start: async (rect) => {
       const preset = presetId();
       if (!preset) {
@@ -176,7 +208,7 @@ export const useLensStore = create<LensState>((set, get) => {
       }
       set({ busy: true, error: null });
       try {
-        set({ status: await startCapture({ mode: "lens", ...rect }, preset) });
+        set({ status: await startCapture({ mode: "lens", ...rect }, preset, get().lang) });
       } catch (error) {
         set({ error: toAppError(error) });
       } finally {

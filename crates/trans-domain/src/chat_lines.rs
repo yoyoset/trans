@@ -19,6 +19,9 @@ pub struct OcrLine {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum LineParser {
+    /// 通用：框里的每一行都当成对方的内容，不判断谁说的。
+    /// 用在没有气泡、也没有名字前缀的地方（网页正文、任意应用窗口）。
+    Plain,
     /// 网页聊天：气泡靠左是对方，靠右是自己。
     Bubble,
     /// 游戏聊天：解析行首的发送者名字；名字等于 self_name 的是自己。
@@ -46,9 +49,29 @@ pub fn parse_lines(lines: &[OcrLine], region_width: u32, parser: &LineParser) ->
     let mut sorted: Vec<&OcrLine> = lines.iter().filter(|l| !l.text.trim().is_empty()).collect();
     sorted.sort_by_key(|l| (l.bounds.y, l.bounds.x));
     match parser {
+        LineParser::Plain => parse_plain(&sorted),
         LineParser::Bubble => parse_bubbles(&sorted, region_width),
         LineParser::Prefix { self_name } => parse_prefixed(&sorted, self_name.as_deref()),
     }
+}
+
+/// 行距接近的相邻行合成一条，其余各自成条；一律算对方说的。
+fn parse_plain(lines: &[&OcrLine]) -> Vec<ParsedMessage> {
+    let mut messages: Vec<ParsedMessage> = Vec::new();
+    let mut previous: Option<&OcrLine> = None;
+    for line in lines {
+        let text = normalize_ocr_text(line.text.trim());
+        let continues = previous.is_some_and(|prev| vertical_gap(prev, line) < SAME_MESSAGE_GAP);
+        match messages.last_mut().filter(|_| continues) {
+            Some(last) => {
+                last.text.push(' ');
+                last.text.push_str(&text);
+            }
+            None => messages.push(ParsedMessage { speaker: Speaker::Them, sender: None, text }),
+        }
+        previous = Some(line);
+    }
+    messages
 }
 
 fn parse_bubbles(lines: &[&OcrLine], region_width: u32) -> Vec<ParsedMessage> {
@@ -141,6 +164,24 @@ mod tests {
 
     fn line(text: &str, x: i32, y: i32) -> OcrLine {
         OcrLine { text: text.into(), bounds: Rect { x, y, width: text.chars().count() as u32 * 8, height: 20 } }
+    }
+
+    #[test]
+    fn plain_reads_every_line_regardless_of_where_it_sits() {
+        // 靠右的那行在气泡模式下会算成"自己"而被丢掉；通用模式必须照样读出来。
+        let lines = [line("网页上的一段中文", 20, 10), line("Right aligned text", 420, 70)];
+        let parsed = parse_lines(&lines, 520, &LineParser::Plain);
+        assert_eq!(parsed.len(), 2);
+        assert!(parsed.iter().all(|m| m.speaker == Speaker::Them && m.sender.is_none()));
+        assert_eq!(parsed[1].text, "Right aligned text");
+    }
+
+    #[test]
+    fn plain_joins_lines_that_belong_to_the_same_paragraph() {
+        let lines = [line("first half of a sentence", 20, 10), line("and its second half", 20, 32)];
+        let parsed = parse_lines(&lines, 520, &LineParser::Plain);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].text, "first half of a sentence and its second half");
     }
 
     #[test]

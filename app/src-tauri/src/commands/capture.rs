@@ -6,6 +6,7 @@ use trans_application::capture::{WindowId, WindowInfo};
 use trans_application::capture_pipeline::{CaptureSource, CaptureTarget};
 use trans_domain::chat_lines::ParsedMessage;
 use trans_domain::geometry::Rect;
+use trans_domain::lang::Lang;
 
 use crate::capture_session::{CaptureInfo, CaptureStatus};
 use crate::error::CommandError;
@@ -25,6 +26,9 @@ pub enum CaptureSourceArgs {
 pub struct CaptureArgs {
     pub source: CaptureSourceArgs,
     pub preset_id: String,
+    /// 识别语言标签（如 zh-hans、en）。为空时用设置里的"对方语言"。
+    #[serde(default)]
+    pub lang: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,6 +73,14 @@ pub fn toggle_lens(app: AppHandle) -> Result<bool, CommandError> {
         tracing::info!(capturing = state_is_running(&app), "lens hidden from floating button");
     }
     Ok(visible)
+}
+
+/// 系统里装了哪些 OCR 语言。没装对应语言时识别不出任何文字，所以要让用户能选。
+#[tauri::command]
+pub fn list_ocr_languages(state: State<'_, AppState>) -> Result<Vec<String>, CommandError> {
+    let pipeline = state.capture.pipeline()?;
+    let langs = pipeline.ocr_languages().map_err(|error| CommandError::new("ocr_failed", error.to_string()))?;
+    Ok(langs.into_iter().map(|lang| lang.as_str().to_owned()).collect())
 }
 
 #[tauri::command]
@@ -156,8 +168,11 @@ async fn build_target(state: &AppState, request: &CaptureArgs) -> Result<(Captur
         }
     };
 
-    // OCR 语言用"对方的语言"：识别的是对方发来的消息。
-    let lang = state.settings.read().await.languages.foreign.clone();
+    // 默认按"对方的语言"识别；用户在取景框里选了别的语言就用选的。
+    let lang = match request.lang.as_deref().map(str::trim).filter(|tag| !tag.is_empty()) {
+        Some(tag) => Lang::new(tag),
+        None => state.settings.read().await.languages.foreign.clone(),
+    };
     let target = CaptureTarget { source, parser: preset.parser.clone(), scale: preset.preprocess.scale, lang };
     let info = CaptureInfo { label, preset_id: preset.id.clone(), preset_name: preset.name.clone() };
     Ok((target, info))

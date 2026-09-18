@@ -28,7 +28,17 @@ export function LensPanel({
   const busy = useLensStore((s) => s.busy);
   const error = useLensStore((s) => s.error);
   const refreshMs = useLensStore((s) => s.refreshMs);
-  const { setPreset, setRefreshMs, refreshNow, start: startCapture, stop, clearLines } = useLensStore.getState();
+  const languages = useLensStore((s) => s.languages);
+  const lang = useLensStore((s) => s.lang);
+  const {
+    setPreset,
+    setLang,
+    setRefreshMs,
+    refreshNow,
+    start: startCapture,
+    stop,
+    clearLines,
+  } = useLensStore.getState();
   const listEnd = useRef<HTMLDivElement>(null);
   const running = status?.running != null;
 
@@ -50,10 +60,13 @@ export function LensPanel({
         side === "right" ? "rounded-r-md border-l" : "rounded-l-md border-r",
       )}
     >
-      <header data-tauri-drag-region className="space-y-2 border-b border-zinc-800 p-3">
+      <header
+        data-tauri-drag-region
+        className="space-y-2 border-b border-zinc-800 p-3"
+      >
         <div className="flex items-center gap-2">
           <select
-            className="input py-1 text-xs"
+            className="input min-w-0 flex-1 py-1 text-xs"
             value={presetId ?? ""}
             onChange={(e) => setPreset(e.target.value)}
             disabled={running}
@@ -65,51 +78,96 @@ export function LensPanel({
               </option>
             ))}
           </select>
-          {running ? (
-            <Button variant="danger" onClick={() => void stop()} disabled={busy} className="shrink-0">
-              {t("lens.stop")}
-            </Button>
-          ) : (
-            <Button variant="primary" onClick={() => void start()} disabled={busy} className="shrink-0">
-              {t("lens.start")}
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <span className="shrink-0">{t("lens.refresh")}</span>
           <select
-            className="input py-1 text-xs"
-            value={refreshMs ?? "manual"}
-            onChange={(e) => setRefreshMs(e.target.value === "manual" ? null : Number(e.target.value))}
-            title={t("lens.refreshHint")}
+            className="input w-24 shrink-0 py-1 text-xs"
+            value={lang ?? ""}
+            onChange={(e) => setLang(e.target.value || null)}
+            disabled={running}
+            title={t("lens.langHint")}
           >
-            {REFRESH_OPTIONS.map((ms) => (
-              <option key={ms ?? "manual"} value={ms ?? "manual"}>
-                {ms === null ? t("lens.refreshManual") : t("lens.refreshEvery", { seconds: ms / 1000 })}
+            <option value="">{t("lens.langDefault")}</option>
+            {languages.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
               </option>
             ))}
           </select>
-          <Button onClick={() => void refreshNow()} disabled={!running} className="shrink-0">
-            {t("lens.refreshNow")}
-          </Button>
         </div>
+        {running ? (
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <span className="shrink-0">{t("lens.refresh")}</span>
+            <select
+              className="input min-w-0 flex-1 py-1 text-xs"
+              value={refreshMs ?? "manual"}
+              onChange={(e) =>
+                setRefreshMs(
+                  e.target.value === "manual" ? null : Number(e.target.value),
+                )
+              }
+              title={t("lens.refreshHint")}
+            >
+              {REFRESH_OPTIONS.map((ms) => (
+                <option key={ms ?? "manual"} value={ms ?? "manual"}>
+                  {ms === null
+                    ? t("lens.refreshManual")
+                    : t("lens.refreshEvery", { seconds: ms / 1000 })}
+                </option>
+              ))}
+            </select>
+            {refreshMs === null && (
+              <Button onClick={() => void refreshNow()} className="shrink-0">
+                {t("lens.refreshNow")}
+              </Button>
+            )}
+            <Button
+              variant="danger"
+              onClick={() => void stop()}
+              disabled={busy}
+              className="shrink-0"
+            >
+              {t("lens.stop")}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={() => void start()}
+            disabled={busy}
+            className="w-full"
+          >
+            {t("lens.start")}
+          </Button>
+        )}
         <p className="text-xs text-zinc-500">
           {running
             ? t("lens.seen", { count: status?.last_seen ?? 0 })
             : t("lens.idleHint")}
         </p>
-        {running && refreshMs === null && <p className="text-xs text-amber-300">{t("lens.manualHint")}</p>}
-        {status?.last_error && <p className="text-xs text-amber-300">{status.last_error}</p>}
+        {running && (status?.last_ocr_lines ?? 0) === 0 && (
+          <p className="text-xs text-amber-300">{t("lens.nothingRead")}</p>
+        )}
+        {running && refreshMs === null && (
+          <p className="text-xs text-amber-300">{t("lens.manualHint")}</p>
+        )}
+        {status?.last_error && (
+          <p className="text-xs text-amber-300">{status.last_error}</p>
+        )}
         {error && <ErrorNotice error={error} />}
       </header>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {lines.length === 0 ? (
-          <p className="py-6 text-center text-xs text-zinc-500">{running ? t("lens.waiting") : t("lens.empty")}</p>
+          <p className="py-6 text-center text-xs text-zinc-500">
+            {running ? t("lens.waiting") : t("lens.empty")}
+          </p>
         ) : (
           <>
             <div className="flex justify-end">
-              <button type="button" className="text-xs text-zinc-500 hover:text-zinc-300" onClick={clearLines}>
+              <button
+                type="button"
+                className="text-xs text-zinc-500 hover:text-zinc-300"
+                onClick={clearLines}
+              >
                 {t("lens.clear")}
               </button>
             </div>

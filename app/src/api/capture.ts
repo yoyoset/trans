@@ -22,11 +22,14 @@ export const showMainWindow = () => call<void>("show_main_window");
 /** 真正退出应用（主窗口的关闭按钮只是收起成悬浮按钮）。 */
 export const quitApp = () => call<void>("quit_app");
 
-export const previewCapture = (source: CaptureSourceArgs, presetId: string) =>
-  call<CapturePreview>("preview_capture", { request: { source, preset_id: presetId } });
+/** 系统装了哪些 OCR 语言；没装对应语言就什么都识别不出来。 */
+export const listOcrLanguages = () => call<string[]>("list_ocr_languages");
 
-export const startCapture = (source: CaptureSourceArgs, presetId: string) =>
-  call<CaptureStatus>("start_capture", { request: { source, preset_id: presetId } });
+export const previewCapture = (source: CaptureSourceArgs, presetId: string, lang: string | null) =>
+  call<CapturePreview>("preview_capture", { request: { source, preset_id: presetId, lang } });
+
+export const startCapture = (source: CaptureSourceArgs, presetId: string, lang: string | null) =>
+  call<CaptureStatus>("start_capture", { request: { source, preset_id: presetId, lang } });
 
 export const stopCapture = () => call<CaptureStatus>("stop_capture");
 

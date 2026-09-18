@@ -15,6 +15,15 @@ use windows::Storage::Streams::DataWriter;
 pub struct WindowsOcr;
 
 impl OcrEngine for WindowsOcr {
+    fn available_languages(&self) -> Result<Vec<Lang>, OcrError> {
+        let available = WinOcrEngine::AvailableRecognizerLanguages().map_err(backend)?;
+        let mut langs = Vec::new();
+        for language in available {
+            langs.push(Lang::new(&language.LanguageTag().map_err(backend)?.to_string()));
+        }
+        Ok(langs)
+    }
+
     fn recognize(&self, frame: &Frame, lang: &Lang) -> Result<Vec<OcrLine>, OcrError> {
         let language = installed_language(lang)?;
         let engine = WinOcrEngine::TryCreateFromLanguage(&language).map_err(backend)?;

@@ -52,5 +52,10 @@ pub trait ScreenCapture: Send + Sync {
 }
 
 pub trait OcrEngine: Send + Sync {
+    /// 系统里装了哪些识别语言。识别框里是什么语言由用户选，装了什么只有适配器知道。
+    fn available_languages(&self) -> Result<Vec<Lang>, OcrError> {
+        Ok(Vec::new())
+    }
+
     fn recognize(&self, frame: &Frame, lang: &Lang) -> Result<Vec<OcrLine>, OcrError>;
 }

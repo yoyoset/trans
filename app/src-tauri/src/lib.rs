@@ -70,6 +70,7 @@ pub fn run() {
             commands::app_windows::quit_app,
             commands::capture::capture_status,
             commands::capture::list_capture_windows,
+            commands::capture::list_ocr_languages,
             commands::capture::preview_capture,
             commands::capture::start_capture,
             commands::capture::update_capture_region,

@@ -157,6 +157,7 @@ export interface CaptureStatus {
   running: CaptureInfo | null;
   last_error: string | null;
   last_seen: number;
+  last_ocr_lines: number;
 }
 
 export interface CapturePreview {

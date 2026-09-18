@@ -48,6 +48,8 @@ pub struct PollOutcome {
     pub all: Vec<ParsedMessage>,
     /// 实际识别的区域。取景框模式下就是框本身；跟随窗口模式下随窗口尺寸变化。
     pub region: Rect,
+    /// OCR 认出的文字行数。和 `all` 一起看能区分"框里没文字"和"文字被解析规则丢掉了"。
+    pub ocr_lines: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -75,6 +77,7 @@ struct Recognized {
     target: CaptureTarget,
     frame: Frame,
     messages: Vec<ParsedMessage>,
+    ocr_lines: usize,
 }
 
 impl CapturePipeline {
@@ -86,6 +89,11 @@ impl CapturePipeline {
             reconciler: Mutex::new(Reconciler::new(RECONCILER_CAPACITY)),
             last: Mutex::new(None),
         }
+    }
+
+    /// 系统装了哪些 OCR 语言。
+    pub fn ocr_languages(&self) -> Result<Vec<Lang>, OcrError> {
+        self.ocr.available_languages()
     }
 
     /// 可截取的窗口列表，供"跟随窗口"模式选目标。
@@ -107,32 +115,37 @@ impl CapturePipeline {
 
     /// 抓一帧并返回新出现的消息，同时把它们记入判重历史。
     pub fn poll(&self, target: &CaptureTarget) -> Result<PollOutcome, PipelineError> {
-        let (all, region) = self.observe(target)?;
-        let fresh = self.reconciler.lock().unwrap_or_else(PoisonError::into_inner).ingest(all.clone());
-        Ok(PollOutcome { fresh, all, region })
+        let observed = self.observe(target)?;
+        let fresh = self.reconciler.lock().unwrap_or_else(PoisonError::into_inner).ingest(observed.all.clone());
+        Ok(PollOutcome { fresh, ..observed })
     }
 
     /// 只看一眼当前识别结果，用于确认框选对没对准。不写入判重历史，所以预览多少次都不会
     /// 让正式识别漏掉消息。
     pub fn preview(&self, target: &CaptureTarget) -> Result<PollOutcome, PipelineError> {
-        let (all, region) = self.observe(target)?;
-        Ok(PollOutcome { fresh: Vec::new(), all, region })
+        self.observe(target)
     }
 
-    fn observe(&self, target: &CaptureTarget) -> Result<(Vec<ParsedMessage>, Rect), PipelineError> {
+    /// 看一眼当前画面认出了什么（不碰判重历史）。
+    fn observe(&self, target: &CaptureTarget) -> Result<PollOutcome, PipelineError> {
         let (frame, region) = self.grab(&target.source)?;
         {
             let last = self.last.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some(last) = last.as_ref().filter(|last| last.target == *target && last.frame == frame) {
-                return Ok((last.messages.clone(), region));
+                return Ok(PollOutcome {
+                    fresh: Vec::new(),
+                    all: last.messages.clone(),
+                    region,
+                    ocr_lines: last.ocr_lines,
+                });
             }
         }
         let scaled = frame.scaled(target.scale);
         let lines = self.ocr.recognize(&scaled, &target.lang)?;
         let messages = parse_lines(&lines, scaled.width(), &target.parser);
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) =
-            Some(Recognized { target: target.clone(), frame, messages: messages.clone() });
-        Ok((messages, region))
+            Some(Recognized { target: target.clone(), frame, messages: messages.clone(), ocr_lines: lines.len() });
+        Ok(PollOutcome { fresh: Vec::new(), all: messages, region, ocr_lines: lines.len() })
     }
 
     fn grab(&self, source: &CaptureSource) -> Result<(Frame, Rect), PipelineError> {

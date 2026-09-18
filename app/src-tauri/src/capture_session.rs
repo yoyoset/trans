@@ -40,6 +40,8 @@ pub struct CaptureStatus {
     pub last_error: Option<String>,
     /// 最近一次抓取识别到的消息条数。
     pub last_seen: usize,
+    /// 最近一次 OCR 认出的文字行数。为 0 说明框里就没读到字（位置不对、语言不对）。
+    pub last_ocr_lines: usize,
 }
 
 pub struct CaptureSession {
@@ -93,6 +95,7 @@ impl CaptureSession {
             status.running = Some(info);
             status.last_error = None;
             status.last_seen = 0;
+            status.last_ocr_lines = 0;
         });
         Ok(self.status())
     }
@@ -206,6 +209,7 @@ async fn run_loop(
                 publish_status(&app, |status| {
                     status.last_error = None;
                     status.last_seen = outcome.all.len();
+                    status.last_ocr_lines = outcome.ocr_lines;
                 });
                 let theirs: Vec<ParsedMessage> =
                     outcome.fresh.into_iter().filter(|message| message.speaker == Speaker::Them).collect();

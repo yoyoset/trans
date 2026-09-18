@@ -65,6 +65,8 @@ pub enum PresetError {
 }
 
 const BUILTIN: &[(&str, &str)] = &[
+    // 第一个是界面上的默认选项：先能读出东西，再谈分辨谁说的。
+    ("generic", include_str!("../presets/generic.json")),
     ("messenger-web", include_str!("../presets/messenger-web.json")),
     ("d2r-chat", include_str!("../presets/d2r-chat.json")),
 ];

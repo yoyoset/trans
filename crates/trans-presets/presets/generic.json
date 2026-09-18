@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "generic",
+  "name": "通用（框里的文字全读）",
+  "region": {
+    "left": { "value": 0, "unit": "px", "from": "start" },
+    "right": { "value": 0, "unit": "px", "from": "end" },
+    "top": { "value": 0, "unit": "px", "from": "start" },
+    "bottom": { "value": 0, "unit": "px", "from": "end" }
+  },
+  "parser": { "kind": "plain" },
+  "preprocess": { "scale": 1.0 },
+  "delivery": "copy_only",
+  "glossary": []
+}
