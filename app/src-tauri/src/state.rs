@@ -26,6 +26,8 @@ pub struct AppState {
     pub capture: CaptureSession,
     pub presets: Vec<RegionPreset>,
     pub startup_warnings: Mutex<Vec<String>>,
+    /// 取景框、悬浮按钮上次摆在哪。
+    pub geometry: crate::window_geometry::GeometryStore,
 }
 
 /// 拿不到目录时对应功能降级（不写引擎日志 / 不能用 opencode），不影响启动。
@@ -63,6 +65,7 @@ impl AppState {
             capture: CaptureSession::new(app.clone(), capture_pipeline()),
             presets: trans_presets::builtin_presets()?,
             startup_warnings: Mutex::new(warnings),
+            geometry: crate::window_geometry::GeometryStore::new(app.path().app_config_dir()?.join("windows.json")),
         })
     }
 }

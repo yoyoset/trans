@@ -40,13 +40,27 @@ fn show_overlay(window: &WebviewWindow) -> Result<(), CommandError> {
 
 pub fn open_lens(app: &AppHandle) -> Result<(), CommandError> {
     let lens = window(app, LENS)?;
+    geometry(app).restore(&lens, true);
     show_overlay(&lens)?;
     lens.set_focus().map_err(CommandError::internal)
 }
 
 /// 只隐藏窗口，识别照常在后台进行；重新打开时面板里会有隐藏期间识别到的消息。
 pub fn close_lens(app: &AppHandle) -> Result<(), CommandError> {
-    window(app, LENS)?.hide().map_err(CommandError::internal)
+    let lens = window(app, LENS)?;
+    geometry(app).remember(&lens);
+    lens.hide().map_err(CommandError::internal)
+}
+
+/// 窗口移动、缩放后调用：记住位置，下次打开还在原地。
+pub fn remember_geometry(window: &WebviewWindow) {
+    if matches!(window.label(), LENS | BUBBLE) {
+        geometry(window.app_handle()).remember(window);
+    }
+}
+
+fn geometry(app: &AppHandle) -> &crate::window_geometry::GeometryStore {
+    &app.state::<crate::state::AppState>().inner().geometry
 }
 
 /// 返回切换后取景框是否可见。
@@ -73,7 +87,11 @@ pub fn collapse_to_bubble(app: &AppHandle) -> Result<(), CommandError> {
     window(app, MAIN)?.hide().map_err(CommandError::internal)?;
     let bubble = window(app, BUBBLE)?;
     if !BUBBLE_PLACED.swap(true, Ordering::Relaxed) {
-        place_bottom_right(&bubble);
+        // 上次的位置优先；从来没摆过才放到右下角。大小不还原：胶囊尺寸是固定的。
+        match geometry(app).get(BUBBLE) {
+            Some(_) => geometry(app).restore(&bubble, false),
+            None => place_bottom_right(&bubble),
+        }
     }
     show_overlay(&bubble)
 }

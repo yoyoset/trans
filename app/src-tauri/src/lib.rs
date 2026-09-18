@@ -9,6 +9,7 @@ mod overlay_windows;
 mod refresh;
 mod settings_store;
 mod state;
+mod window_geometry;
 
 use tauri::Manager;
 
@@ -23,6 +24,11 @@ pub fn run() {
         }))
         .on_window_event(|window, event| {
             // 关主窗口不退出：收成悬浮按钮，识别和本地引擎都继续运行。
+            if let tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) = event {
+                if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                    overlay_windows::remember_geometry(&webview);
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == overlay_windows::MAIN {
                     api.prevent_close();
