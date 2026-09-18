@@ -2,6 +2,8 @@ export const zh = {
   app: {
     title: "Trans 聊天翻译",
     tabs: { composer: "翻译", capture: "窗口识别", settings: "设置" },
+    gotIt: "知道了",
+    closeToBubble: "关闭这个窗口不会退出程序：它会收成桌面上的小按钮，点它开关取景框，右键可以退出。",
   },
   engine: {
     local: "本地",
@@ -13,6 +15,7 @@ export const zh = {
       failed: "失败",
     },
     restart: "重新启动引擎",
+    showDetail: "查看详细原因",
   },
   composer: {
     preset: "术语场景",
