@@ -1,9 +1,15 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import clsx from "clsx";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { closeLens, updateCaptureRegion } from "../../api/capture";
+import {
+  closeLens,
+  lensClickThrough,
+  onClickThrough,
+  toggleLensClickThrough,
+  updateCaptureRegion,
+} from "../../api/capture";
 import { ErrorBoundary } from "../../shared/ui/ErrorBoundary";
 import { LensPanel } from "./LensPanel";
 import { useLensLayout } from "./useLensLayout";
@@ -27,12 +33,34 @@ export function LensWindow() {
 
   useEffect(() => init(), [init]);
 
+  // 让开鼠标时整个取景框不接收点击，只能靠热键恢复，所以要显眼地提示。
+  const [clickThrough, setClickThrough] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    lensClickThrough()
+      .then((on) => !disposed && setClickThrough(on))
+      .catch((error) => console.error("lens_click_through failed", error));
+    onClickThrough(setClickThrough)
+      .then((fn) => (disposed ? fn() : (unlisten = fn)))
+      .catch((error) =>
+        console.error("click-through subscription failed", error),
+      );
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   /** 取景区在屏幕上的绝对物理像素位置——后端就按这块区域截图。 */
   const captureRect = useCallback(async (): Promise<LensRect | null> => {
     const box = hollow.current?.getBoundingClientRect();
     if (!box) return null;
     const win = getCurrentWindow();
-    const [position, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
+    const [position, scale] = await Promise.all([
+      win.outerPosition(),
+      win.scaleFactor(),
+    ]);
     return {
       x: position.x + Math.round(box.left * scale),
       y: position.y + Math.round(box.top * scale),
@@ -51,7 +79,9 @@ export function LensWindow() {
     syncTimer.current = window.setTimeout(() => {
       void captureRect().then((rect) => {
         if (rect && runningRef.current) {
-          updateCaptureRegion(rect).catch((error) => console.error("update_capture_region failed", error));
+          updateCaptureRegion(rect).catch((error) =>
+            console.error("update_capture_region failed", error),
+          );
         }
       });
     }, REGION_SYNC_DELAY_MS);
@@ -61,10 +91,15 @@ export function LensWindow() {
     const win = getCurrentWindow();
     let disposed = false;
     const unlisten: Array<() => void> = [];
-    for (const pending of [win.onMoved(scheduleRegionSync), win.onResized(scheduleRegionSync)]) {
+    for (const pending of [
+      win.onMoved(scheduleRegionSync),
+      win.onResized(scheduleRegionSync),
+    ]) {
       pending
         .then((fn) => (disposed ? fn() : unlisten.push(fn)))
-        .catch((error) => console.error("window event subscription failed", error));
+        .catch((error) =>
+          console.error("window event subscription failed", error),
+        );
     }
     return () => {
       disposed = true;
@@ -78,7 +113,12 @@ export function LensWindow() {
   }, [layout.side, layout.panelWidth, scheduleRegionSync]);
 
   return (
-    <div className={clsx("relative flex h-screen w-screen bg-transparent text-zinc-100", panelOnLeft && "flex-row-reverse")}>
+    <div
+      className={clsx(
+        "relative flex h-screen w-screen bg-transparent text-zinc-100",
+        panelOnLeft && "flex-row-reverse",
+      )}
+    >
       <section className="flex min-w-0 flex-1 flex-col">
         <header
           data-tauri-drag-region
@@ -90,9 +130,27 @@ export function LensWindow() {
           <span data-tauri-drag-region className="font-medium">
             {t("lens.title")}
           </span>
-          <span data-tauri-drag-region className="truncate text-zinc-400">
-            {running ? t("lens.runningHint") : t("lens.dragHint")}
+          <span
+            data-tauri-drag-region
+            className={clsx(
+              "truncate",
+              clickThrough ? "text-amber-300" : "text-zinc-400",
+            )}
+          >
+            {clickThrough
+              ? t("lens.clickThroughOn")
+              : running
+                ? t("lens.runningHint")
+                : t("lens.dragHint")}
           </span>
+          <button
+            type="button"
+            onClick={() => void toggleLensClickThrough()}
+            className="shrink-0 rounded px-2 py-0.5 text-zinc-300 hover:bg-zinc-700"
+            title={t("lens.clickThroughHint")}
+          >
+            {t("lens.clickThrough")}
+          </button>
           <button
             type="button"
             onClick={swapSide}
@@ -111,24 +169,46 @@ export function LensWindow() {
         {/* 取景区：完全透明，能看到底下的内容。识别中边框变绿并加粗，一眼能看出正在读哪块。 */}
         <div
           ref={hollow}
-          className={running ? "flex-1 border-[3px] border-emerald-400" : "flex-1 border-2 border-dashed border-sky-400/90"}
+          className={
+            running
+              ? "flex-1 border-[3px] border-emerald-400"
+              : "flex-1 border-2 border-dashed border-sky-400/90"
+          }
         />
       </section>
 
       <Divider
         title={t("lens.dividerHint")}
-        onDrag={(deltaX, startWidth) => update({ panelWidth: startWidth + (panelOnLeft ? deltaX : -deltaX) })}
+        onDrag={(deltaX, startWidth) =>
+          update({ panelWidth: startWidth + (panelOnLeft ? deltaX : -deltaX) })
+        }
         panelWidth={layout.panelWidth}
       />
 
       <ErrorBoundary>
-        <LensPanel captureRect={captureRect} width={layout.panelWidth} side={layout.side} />
+        <LensPanel
+          captureRect={captureRect}
+          width={layout.panelWidth}
+          side={layout.side}
+        />
       </ErrorBoundary>
 
-      <ResizeHandle direction="NorthWest" className="left-0 top-0 cursor-nwse-resize" />
-      <ResizeHandle direction="SouthWest" className="bottom-0 left-0 cursor-nesw-resize" />
-      <ResizeHandle direction="NorthEast" className="right-0 top-0 cursor-nesw-resize" />
-      <ResizeHandle direction="SouthEast" className="bottom-0 right-0 cursor-nwse-resize" />
+      <ResizeHandle
+        direction="NorthWest"
+        className="left-0 top-0 cursor-nwse-resize"
+      />
+      <ResizeHandle
+        direction="SouthWest"
+        className="bottom-0 left-0 cursor-nesw-resize"
+      />
+      <ResizeHandle
+        direction="NorthEast"
+        className="right-0 top-0 cursor-nesw-resize"
+      />
+      <ResizeHandle
+        direction="SouthEast"
+        className="bottom-0 right-0 cursor-nwse-resize"
+      />
     </div>
   );
 }
@@ -153,7 +233,8 @@ function Divider({
         const startWidth = panelWidth;
         const target = e.currentTarget;
         target.setPointerCapture(e.pointerId);
-        const move = (event: PointerEvent) => onDrag(event.clientX - startX, startWidth);
+        const move = (event: PointerEvent) =>
+          onDrag(event.clientX - startX, startWidth);
         const up = () => {
           target.removeEventListener("pointermove", move);
           target.removeEventListener("pointerup", up);
@@ -168,7 +249,13 @@ function Divider({
 type ResizeDirection = "NorthWest" | "NorthEast" | "SouthWest" | "SouthEast";
 
 /** 窗口四角的缩放把手，缩放交给系统完成。 */
-function ResizeHandle({ direction, className }: { direction: ResizeDirection; className: string }) {
+function ResizeHandle({
+  direction,
+  className,
+}: {
+  direction: ResizeDirection;
+  className: string;
+}) {
   return (
     <div
       className={`absolute z-10 h-3 w-3 bg-sky-400/80 ${className}`}

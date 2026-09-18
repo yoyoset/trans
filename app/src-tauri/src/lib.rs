@@ -4,6 +4,7 @@ mod capture_session;
 mod commands;
 mod engines;
 mod error;
+mod hotkeys;
 mod logging;
 mod overlay_windows;
 mod refresh;
@@ -38,6 +39,7 @@ pub fn run() {
             }
         })
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
             match app.path().app_log_dir() {
                 Ok(dir) => match logging.attach_file(&dir) {
@@ -49,6 +51,14 @@ pub fn run() {
             let state = state::AppState::initialize(app.handle())?;
             app.manage(state);
             state::spawn_apply_engines(app.handle().clone());
+            let state = app.state::<state::AppState>();
+            let hotkey_problems = {
+                let settings = tauri::async_runtime::block_on(state.settings.read());
+                hotkeys::apply(app.handle(), &settings.hotkeys)
+            };
+            if !hotkey_problems.is_empty() {
+                state.startup_warnings.lock().unwrap().extend(hotkey_problems);
+            }
             if let Err(error) = overlay_windows::show_bubble(app.handle()) {
                 tracing::warn!(?error, "failed to show the floating icon");
             }
@@ -69,6 +79,9 @@ pub fn run() {
             commands::capture::open_lens,
             commands::capture::close_lens,
             commands::capture::toggle_lens,
+            commands::capture::toggle_lens_click_through,
+            commands::capture::lens_click_through,
+            commands::capture::list_hotkeys,
             commands::app_windows::show_main_window,
             commands::app_windows::quit_app,
             commands::capture::capture_status,

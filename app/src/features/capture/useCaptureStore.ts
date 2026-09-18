@@ -1,6 +1,14 @@
 import { create } from "zustand";
 
-import { captureSupported, closeLens, getCaptureStatus, onCaptureStatus, openLens, stopCapture } from "../../api/capture";
+import {
+  captureSupported,
+  closeLens,
+  getCaptureStatus,
+  listHotkeys,
+  onCaptureStatus,
+  openLens,
+  stopCapture,
+} from "../../api/capture";
 import { AppError, toAppError } from "../../api/client";
 import type { CaptureStatus } from "../../api/types";
 
@@ -11,6 +19,8 @@ import type { CaptureStatus } from "../../api/types";
 interface CaptureState {
   supported: boolean;
   status: CaptureStatus | null;
+  /** 全局热键说明：[按键, 作用]。 */
+  hotkeys: Array<[string, string]>;
   busy: boolean;
   error: AppError | null;
   /** 读取当前状态并订阅后续变化；返回取消订阅函数。 */
@@ -35,6 +45,7 @@ export const useCaptureStore = create<CaptureState>((set) => {
   return {
     supported: false,
     status: null,
+    hotkeys: [],
     busy: false,
     error: null,
 
@@ -42,12 +53,17 @@ export const useCaptureStore = create<CaptureState>((set) => {
       let disposed = false;
       let unlisten: (() => void) | undefined;
       void run(async () => set({ supported: await captureSupported() }));
+      listHotkeys()
+        .then((hotkeys) => !disposed && set({ hotkeys }))
+        .catch((error) => console.error("list_hotkeys failed", error));
       getCaptureStatus()
         .then((status) => !disposed && set({ status }))
         .catch((error) => console.error("capture_status failed", error));
       onCaptureStatus((status) => set({ status }))
         .then((fn) => (disposed ? fn() : (unlisten = fn)))
-        .catch((error) => console.error("capture status subscription failed", error));
+        .catch((error) =>
+          console.error("capture status subscription failed", error),
+        );
       return () => {
         disposed = true;
         unlisten?.();

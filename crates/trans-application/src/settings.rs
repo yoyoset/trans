@@ -16,6 +16,30 @@ pub struct AppSettings {
     pub schema_version: u32,
     pub languages: LanguagePair,
     pub engines: EngineSettings,
+    pub hotkeys: HotkeySettings,
+}
+
+/// 全局热键。写法如 `ctrl+alt+t`；留空表示不注册这个热键。
+/// 系统里同一个组合只能有一个主人，被别的软件占了就得换一个，所以必须可改。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HotkeySettings {
+    /// 打开/收起取景框。
+    pub toggle_lens: String,
+    /// 取景框让开鼠标 / 恢复。
+    pub click_through: String,
+    /// 立即识别一次。
+    pub refresh: String,
+}
+
+impl Default for HotkeySettings {
+    fn default() -> Self {
+        Self {
+            toggle_lens: "ctrl+alt+t".into(),
+            click_through: "ctrl+alt+shift+t".into(),
+            refresh: "ctrl+alt+shift+r".into(),
+        }
+    }
 }
 
 impl Default for AppSettings {
@@ -24,6 +48,7 @@ impl Default for AppSettings {
             schema_version: SETTINGS_SCHEMA_VERSION,
             languages: LanguagePair::default(),
             engines: EngineSettings::default(),
+            hotkeys: HotkeySettings::default(),
         }
     }
 }

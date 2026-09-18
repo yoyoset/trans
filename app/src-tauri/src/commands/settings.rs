@@ -20,9 +20,15 @@ pub async fn save_settings(
 ) -> Result<(), CommandError> {
     state.settings_store.save(&settings).map_err(CommandError::internal)?;
     state.service.update_config(ServiceConfig::from(&settings));
+    // 热键改了要重新注册：系统里同一个组合只能有一个主人。
+    let problems = crate::hotkeys::apply(&app, &settings.hotkeys);
     *state.settings.write().await = settings;
     spawn_apply_engines(app);
-    Ok(())
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        Err(CommandError::new("hotkey_unavailable", problems.join("；")))
+    }
 }
 
 #[tauri::command]

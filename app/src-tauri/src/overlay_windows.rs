@@ -6,7 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{AppHandle, Manager, PhysicalPosition, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow};
 
 use crate::error::CommandError;
 
@@ -24,6 +24,12 @@ const BUBBLE_MARGIN: (f64, f64) = (160.0, 180.0);
 
 /// 悬浮按钮是否已经摆过位置。摆过之后不再动，保持用户拖到的地方。
 static BUBBLE_PLACED: AtomicBool = AtomicBool::new(false);
+
+/// 取景框是否正在"让开鼠标"。
+static CLICK_THROUGH: AtomicBool = AtomicBool::new(false);
+
+/// 让开鼠标状态变化时通知取景框面板，面板要提示怎么恢复。
+pub const LENS_CLICK_THROUGH_EVENT: &str = "lens-click-through";
 
 fn window(app: &AppHandle, label: &str) -> Result<WebviewWindow, CommandError> {
     app.get_webview_window(label).ok_or_else(|| CommandError::new("window_missing", format!("窗口 {label} 不存在")))
@@ -63,6 +69,25 @@ pub fn remember_geometry(window: &WebviewWindow) {
 
 fn geometry(app: &AppHandle) -> &crate::window_geometry::GeometryStore {
     &app.state::<crate::state::AppState>().inner().geometry
+}
+
+/// 取景框让开鼠标：整个取景框窗口不再接收点击，可以直接操作底下的聊天窗口；
+/// 再按一次恢复。识别不受影响（截图和鼠标无关）。
+/// 返回切换后是否处于"让开鼠标"状态。
+pub fn toggle_click_through(app: &AppHandle) -> Result<bool, CommandError> {
+    let lens = window(app, LENS)?;
+    let ignoring = !CLICK_THROUGH.load(Ordering::Relaxed);
+    lens.set_ignore_cursor_events(ignoring).map_err(CommandError::internal)?;
+    CLICK_THROUGH.store(ignoring, Ordering::Relaxed);
+    if let Err(error) = app.emit(LENS_CLICK_THROUGH_EVENT, ignoring) {
+        tracing::warn!(%error, "failed to emit click-through state");
+    }
+    Ok(ignoring)
+}
+
+/// 取景框当前是否在让开鼠标。
+pub fn click_through() -> bool {
+    CLICK_THROUGH.load(Ordering::Relaxed)
 }
 
 /// 返回切换后取景框是否可见。

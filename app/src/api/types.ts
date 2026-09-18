@@ -61,10 +61,17 @@ export interface EngineSettings {
   calibration: CalibrationSettings;
 }
 
+export interface HotkeySettings {
+  toggle_lens: string;
+  click_through: string;
+  refresh: string;
+}
+
 export interface AppSettings {
   schema_version: number;
   languages: LanguagePair;
   engines: EngineSettings;
+  hotkeys: HotkeySettings;
 }
 
 export type ValidationIssue =

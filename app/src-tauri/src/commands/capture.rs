@@ -63,6 +63,24 @@ pub fn close_lens(app: AppHandle) -> Result<(), CommandError> {
     overlay_windows::close_lens(&app)
 }
 
+/// 取景框让开鼠标 / 恢复，返回切换后是否在让开鼠标。
+#[tauri::command]
+pub fn toggle_lens_click_through(app: AppHandle) -> Result<bool, CommandError> {
+    overlay_windows::toggle_click_through(&app)
+}
+
+/// 当前是否在让开鼠标（取景框面板加载时要知道）。
+#[tauri::command]
+pub fn lens_click_through() -> bool {
+    overlay_windows::click_through()
+}
+
+/// 界面上展示的热键说明。
+#[tauri::command]
+pub fn list_hotkeys() -> Vec<(String, &'static str)> {
+    crate::hotkeys::descriptions()
+}
+
 /// 悬浮按钮点击：开关取景框，返回切换后是否可见。
 #[tauri::command]
 pub fn toggle_lens(app: AppHandle) -> Result<bool, CommandError> {

@@ -28,6 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt"] }
 tauri = { version = "2.10", features = [] }
 tauri-plugin-dialog = "2.2"
 tauri-plugin-single-instance = "2.2"
+tauri-plugin-global-shortcut = "2.3.2"
 
 [target.'cfg(windows)'.dependencies]
 trans-win = { workspace = true }
