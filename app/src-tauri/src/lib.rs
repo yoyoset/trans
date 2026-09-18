@@ -30,11 +30,10 @@ pub fn run() {
                 }
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == overlay_windows::MAIN {
-                    api.prevent_close();
-                    if let Err(error) = overlay_windows::collapse_to_bubble(window.app_handle()) {
-                        tracing::warn!(?error, "failed to collapse to the floating button");
-                    }
+                // 三个窗口都不能真的关掉：关掉就再也打不开了（Alt+F4、任务栏关闭都会走到这里）。
+                api.prevent_close();
+                if let Err(error) = overlay_windows::handle_close(window.app_handle(), window.label()) {
+                    tracing::warn!(?error, label = window.label(), "failed to handle window close");
                 }
             }
         })

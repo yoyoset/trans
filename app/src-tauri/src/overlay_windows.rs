@@ -14,9 +14,11 @@ pub const MAIN: &str = "main";
 pub const LENS: &str = "lens";
 pub const BUBBLE: &str = "bubble";
 
-/// 悬浮按钮做成 136×56 的胶囊而不是圆点：实测 64×64 的无边框窗口会被 Windows 放宽到 135 宽
-/// （默认最小跟踪宽度），加 minWidth、显示后 set_size 都缩不回去，索性用满这个宽度显示状态文字。
-///
+/// 悬浮按钮的直径（逻辑像素）。窗口本身缩不到这么小——实测 64×64 的无边框窗口会被 Windows
+/// 放宽到 135 宽（默认最小跟踪宽度），加 minWidth、显示后 set_size 都无效——所以窗口保持原样，
+/// 用 [`trans_win::clip_to_circle`] 把它裁成这么大的圆，圆外既不显示也不挡鼠标。
+const BUBBLE_DIAMETER: f64 = 44.0;
+
 /// 悬浮按钮第一次出现时离屏幕右下角的距离（物理像素，按缩放比例换算前）。
 const BUBBLE_MARGIN: (f64, f64) = (160.0, 180.0);
 
@@ -74,6 +76,17 @@ pub fn toggle_lens(app: &AppHandle) -> Result<bool, CommandError> {
     Ok(!visible)
 }
 
+/// 窗口的关闭按钮：主窗口收成悬浮按钮，取景框只隐藏（识别继续），
+/// 悬浮按钮关掉就把主窗口叫回来——否则用户手上什么都不剩。
+pub fn handle_close(app: &AppHandle, label: &str) -> Result<(), CommandError> {
+    match label {
+        MAIN => collapse_to_bubble(app),
+        LENS => close_lens(app),
+        BUBBLE => show_main(app),
+        _ => Ok(()),
+    }
+}
+
 pub fn show_main(app: &AppHandle) -> Result<(), CommandError> {
     let main = window(app, MAIN)?;
     main.unminimize().map_err(CommandError::internal)?;
@@ -87,13 +100,32 @@ pub fn collapse_to_bubble(app: &AppHandle) -> Result<(), CommandError> {
     window(app, MAIN)?.hide().map_err(CommandError::internal)?;
     let bubble = window(app, BUBBLE)?;
     if !BUBBLE_PLACED.swap(true, Ordering::Relaxed) {
-        // 上次的位置优先；从来没摆过才放到右下角。大小不还原：胶囊尺寸是固定的。
+        // 上次的位置优先；从来没摆过才放到右下角。大小不还原：圆形尺寸是固定的。
         match geometry(app).get(BUBBLE) {
             Some(_) => geometry(app).restore(&bubble, false),
             None => place_bottom_right(&bubble),
         }
     }
-    show_overlay(&bubble)
+    show_overlay(&bubble)?;
+    clip_bubble(&bubble);
+    Ok(())
+}
+
+/// 把悬浮按钮窗口裁成小圆。失败只是按钮大一点，不影响使用。
+fn clip_bubble(bubble: &WebviewWindow) {
+    #[cfg(windows)]
+    {
+        let scale = bubble.scale_factor().unwrap_or(1.0);
+        let diameter = (BUBBLE_DIAMETER * scale).round() as i32;
+        match bubble.hwnd() {
+            Ok(hwnd) => {
+                if let Err(error) = trans_win::clip_to_circle(hwnd.0, diameter) {
+                    tracing::warn!(%error, "failed to clip the floating button to a circle");
+                }
+            }
+            Err(error) => tracing::warn!(%error, "no window handle for the floating button"),
+        }
+    }
 }
 
 fn place_bottom_right(bubble: &WebviewWindow) {

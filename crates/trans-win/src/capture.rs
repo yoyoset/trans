@@ -59,6 +59,39 @@ pub fn exclude_from_capture(hwnd: *mut std::ffi::c_void) -> Result<(), String> {
     unsafe { SetWindowDisplayAffinity(HWND(hwnd), WDA_EXCLUDEFROMCAPTURE) }.map_err(|error| error.to_string())
 }
 
+/// 把窗口裁成一个圆：圆外的部分不显示，也不接收鼠标事件（点击穿到下面的窗口）。
+///
+/// 为什么需要：Windows 对窗口有最小宽度限制（实测无边框窗口最窄约 135 px），
+/// 想要一个更小的圆形悬浮图标只能先做大窗口再裁掉多余部分。`diameter` 是物理像素。
+pub fn clip_to_circle(hwnd: *mut std::ffi::c_void, diameter: i32) -> Result<(), String> {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::Graphics::Gdi::{CreateEllipticRgn, SetWindowRgn};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+    if diameter <= 0 {
+        return Err("圆形直径必须大于 0".into());
+    }
+    let hwnd = HWND(hwnd);
+    let mut rect = RECT::default();
+    // SAFETY: hwnd 由调用方从 Tauri 窗口取得，调用期间窗口存活。
+    unsafe { GetWindowRect(hwnd, &raw mut rect) }.map_err(|error| error.to_string())?;
+    let (width, height) = (rect.right - rect.left, rect.bottom - rect.top);
+    let diameter = diameter.min(width).min(height);
+    let (left, top) = ((width - diameter) / 2, (height - diameter) / 2);
+
+    // SAFETY: 区域句柄交给 SetWindowRgn 后由系统拥有，不需要我们释放（bRedraw = TRUE）。
+    unsafe {
+        let region = CreateEllipticRgn(left, top, left + diameter, top + diameter);
+        if region.is_invalid() {
+            return Err("创建圆形区域失败".into());
+        }
+        if SetWindowRgn(hwnd, Some(region), true) == 0 {
+            return Err("设置窗口区域失败".into());
+        }
+    }
+    Ok(())
+}
+
 type Slot = Arc<Mutex<Option<Frame>>>;
 
 fn grab_once<T>(item: T) -> Result<Frame, CaptureError>
