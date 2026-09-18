@@ -17,12 +17,13 @@ vi.mock("../../api/translate", () => ({
 }));
 
 vi.mock("../../api/capture", () => ({
-  getCaptureStatus: vi.fn(async () => ({ running: null, last_error: null, last_seen: 0 })),
+  getCaptureStatus: vi.fn(async () => ({ running: null, last_error: null, last_seen: 0, last_ocr_lines: 0 })),
   onCaptureStatus: vi.fn(async () => () => {}),
   onCapturedLines: vi.fn(async (handler: (lines: ParsedMessage[]) => void) => {
     api.capturedLines = handler;
     return () => {};
   }),
+  listOcrLanguages: vi.fn(async () => ["en-us", "zh-hans-cn"]),
   refreshCapture: vi.fn(async () => {}),
   setCaptureInterval: vi.fn(async () => {}),
   startCapture: vi.fn(),
