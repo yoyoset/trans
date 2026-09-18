@@ -1,7 +1,7 @@
 export const zh = {
   app: {
     title: "Trans 聊天翻译",
-    tabs: { composer: "翻译", capture: "窗口识别", settings: "设置" },
+    tabs: { composer: "翻译", capture: "取景框", settings: "设置" },
     gotIt: "知道了",
     closeToBubble: "关闭这个窗口不会退出程序：它会收成桌面上的小按钮，点它开关取景框，右键可以退出。",
   },
@@ -46,6 +46,8 @@ export const zh = {
     clickWarning: "已知限制：取景框会挡住鼠标点击，要操作底下的窗口时先把它拖开或关掉。",
     openLens: "打开取景框",
     closeLens: "关闭取景框",
+    running: "正在识别 {{target}}（框里现在有 {{count}} 条）。关掉取景框识别也会继续。",
+    stop: "停止识别",
   },
   bubble: {
     hint: "点击开关取景框，拖动可移动，右键更多",

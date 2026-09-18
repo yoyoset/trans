@@ -12,9 +12,9 @@ export function CapturePanel() {
   const capture = useCaptureStore();
   const load = capture.load;
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => load(), [load]);
+
+  const running = capture.status?.running;
 
   if (!capture.supported) {
     return <p className="text-zinc-400">{t("capture.unsupported")}</p>;
@@ -24,6 +24,17 @@ export function CapturePanel() {
     <Section title={t("capture.title")}>
       <p className="text-sm text-zinc-300">{t("capture.howTo")}</p>
       <p className="text-xs text-amber-300">{t("capture.clickWarning")}</p>
+      {running && (
+        <div className="flex items-center gap-3 rounded-md border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+          <span className="flex-1">
+            {t("capture.running", { target: running.label, count: capture.status?.last_seen ?? 0 })}
+          </span>
+          <Button variant="danger" onClick={() => void capture.stop()} disabled={capture.busy}>
+            {t("capture.stop")}
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" onClick={() => void capture.showLens()} disabled={capture.busy}>
           {t("capture.openLens")}
