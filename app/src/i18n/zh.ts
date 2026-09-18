@@ -72,7 +72,7 @@ export const zh = {
     refreshHint: "打字时输入法候选框会浮到取景区上被误读，可以改成手动，需要时点「立即识别」",
     refreshNow: "读一次",
     langDefault: "自动",
-    langHint: "框里文字的语言。选错了会一个字也读不出来；「自动」用设置里的对方语言",
+    langHint: "框里文字的语言。选错了会一个字也读不出来；「自动」用设置里的对方语言。列表来自系统已安装的 OCR 语言包",
     nothingRead: "框里没读到任何文字：确认框压在文字上，并把右边的语言换成框里文字的语言。",
     presetHint: "场景决定怎么分辨谁说的话、用哪套术语",
     start: "开始识别（把框对准内容后点这里）",
@@ -153,6 +153,7 @@ export const zh = {
       contextTurns: "在线校对附带的对话轮数",
       userLang: "我的语言",
       foreignLang: "对方语言",
+      langHint: "决定翻译的目标语言；取景框里识别用的语言单独选（要系统装了对应的 OCR 语言包）",
     },
   },
   errors: {

@@ -25,6 +25,10 @@ impl Lang {
         let primary = self.primary();
         if HAN_LANGS.contains(&primary) {
             Script::Han
+        } else if KANA_LANGS.contains(&primary) {
+            Script::Kana
+        } else if HANGUL_LANGS.contains(&primary) {
+            Script::Hangul
         } else if LATIN_LANGS.contains(&primary) {
             Script::Latin
         } else {
@@ -39,11 +43,17 @@ impl Lang {
 pub enum Script {
     Han,
     Latin,
+    /// 日文：假名为主，夹杂汉字。
+    Kana,
+    /// 朝鲜文：谚文。
+    Hangul,
     /// 未收录的语言：跳过书写系统校验，而不是误报。
     Unknown,
 }
 
 const HAN_LANGS: &[&str] = &["zh"];
+const KANA_LANGS: &[&str] = &["ja"];
+const HANGUL_LANGS: &[&str] = &["ko"];
 const LATIN_LANGS: &[&str] =
     &["en", "fr", "de", "es", "it", "pt", "nl", "sv", "da", "nb", "no", "fi", "pl", "cs", "tr", "id", "ms", "vi"];
 
@@ -111,7 +121,9 @@ mod tests {
         assert_eq!(Lang::new("zh-Hans").primary(), "zh");
         assert_eq!(Lang::new("ZH_CN").script(), Script::Han);
         assert_eq!(Lang::new("en-US").script(), Script::Latin);
-        assert_eq!(Lang::new("ja").script(), Script::Unknown);
+        assert_eq!(Lang::new("ja").script(), Script::Kana);
+        assert_eq!(Lang::new("ko-KR").script(), Script::Hangul);
+        assert_eq!(Lang::new("sw").script(), Script::Unknown, "没收录的语言跳过书写系统校验");
     }
 
     #[test]

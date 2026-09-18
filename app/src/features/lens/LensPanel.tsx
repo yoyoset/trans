@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
+import { languageLabel } from "../../api/languages";
 import { Button } from "../../shared/ui/Button";
 import { ErrorNotice } from "../../shared/ui/ErrorNotice";
 import { LineItem } from "./LineItem";
@@ -88,7 +89,7 @@ export function LensPanel({
             <option value="">{t("lens.langDefault")}</option>
             {languages.map((tag) => (
               <option key={tag} value={tag}>
-                {tag}
+                {languageLabel(tag)}
               </option>
             ))}
           </select>

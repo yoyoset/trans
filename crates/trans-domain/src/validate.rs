@@ -50,15 +50,28 @@ fn script_matches(text: &str, expected: Script) -> bool {
     match expected {
         Script::Han => han > 0,
         Script::Latin => han <= latin,
+        // 日文可以整句假名，也可以假名夹汉字；只要有其中一种就算对。
+        Script::Kana => text.chars().any(is_kana) || han > 0,
+        Script::Hangul => text.chars().any(is_hangul),
         Script::Unknown => true,
     }
 }
 
+fn is_kana(c: char) -> bool {
+    matches!(c, '\u{3040}'..='\u{309f}' | '\u{30a0}'..='\u{30ff}')
+}
+
+fn is_hangul(c: char) -> bool {
+    matches!(c, '\u{ac00}'..='\u{d7a3}' | '\u{1100}'..='\u{11ff}' | '\u{3130}'..='\u{318f}')
+}
+
 /// 汉字信息密度远高于拉丁字母，中译英的译文天然会长好几倍（M0-02：11 个汉字 → 34 个英文字符）。
 fn ratio_bounds(source: Script, target: Script) -> (f64, f64) {
-    match (source, target) {
-        (Script::Latin, Script::Han) => (0.15, 2.0),
-        (Script::Han, Script::Latin) => (0.5, 8.0),
+    // 日文、朝鲜文的信息密度介于汉字和拉丁字母之间，和汉字同档处理。
+    let dense = |script| matches!(script, Script::Han | Script::Kana | Script::Hangul);
+    match (dense(source), dense(target)) {
+        (false, true) => (0.15, 2.0),
+        (true, false) => (0.5, 8.0),
         _ => (0.2, 5.0),
     }
 }
@@ -130,6 +143,32 @@ fn is_han(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn langs(user: &str, foreign: &str) -> LanguagePair {
+        LanguagePair { user: crate::lang::Lang::new(user), foreign: crate::lang::Lang::new(foreign) }
+    }
+
+    #[test]
+    fn japanese_and_korean_targets_are_checked_instead_of_skipped() {
+        // 中文 → 日文：译文里必须有假名或汉字。
+        let ja = langs("zh", "ja");
+        assert!(validate_translation("明天见", "また明日", Direction::Outgoing, &ja).is_empty());
+        let wrong = validate_translation("明天见", "see you", Direction::Outgoing, &ja);
+        assert!(wrong.contains(&ValidationIssue::WrongScript { expected: Script::Kana }), "{wrong:?}");
+
+        // 中文 → 朝鲜文：必须有谚文。
+        let ko = langs("zh", "ko");
+        assert!(validate_translation("明天见", "내일 봐요", Direction::Outgoing, &ko).is_empty());
+        let wrong = validate_translation("明天见", "naeil bwayo", Direction::Outgoing, &ko);
+        assert!(wrong.contains(&ValidationIssue::WrongScript { expected: Script::Hangul }), "{wrong:?}");
+    }
+
+    #[test]
+    fn japanese_to_chinese_keeps_the_dense_to_dense_length_bounds() {
+        let ja = langs("zh", "ja");
+        // 长度接近，不应该因为比例报问题。
+        assert!(validate_translation("また明日", "明天见", Direction::Incoming, &ja).is_empty());
+    }
 
     fn check(source: &str, translation: &str, direction: Direction) -> Vec<ValidationIssue> {
         validate_translation(source, translation, direction, &LanguagePair::default())
