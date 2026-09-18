@@ -6,6 +6,7 @@ import { takeStartupWarnings } from "./api/engines";
 import { CapturePanel } from "./features/capture/CapturePanel";
 import { ComposerPanel } from "./features/composer/ComposerPanel";
 import { EngineStatusBar } from "./features/engines/EngineStatusBar";
+import { SetupHint } from "./features/engines/SetupHint";
 import { SettingsPanel } from "./features/settings/SettingsPanel";
 import { useSettingsStore } from "./features/settings/useSettingsStore";
 import { ErrorBoundary } from "./shared/ui/ErrorBoundary";
@@ -48,6 +49,7 @@ export default function App() {
         </div>
         <EngineStatusBar />
         <OneTimeHint id="close-to-bubble">{t("app.closeToBubble")}</OneTimeHint>
+        <SetupHint onOpenSettings={() => setTab("settings")} />
         {warnings.map((warning) => (
           <p key={warning} className="rounded-md bg-amber-950/60 px-3 py-1.5 text-xs text-amber-200">
             {warning}

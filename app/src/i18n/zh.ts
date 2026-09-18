@@ -16,6 +16,8 @@ export const zh = {
     },
     restart: "重新启动引擎",
     showDetail: "查看详细原因",
+    setupNeeded: "本地引擎还没配置：需要指定 llama-server 程序和一个 GGUF 模型文件，翻译才能用。",
+    goSettings: "去设置",
   },
   composer: {
     preset: "术语场景",
