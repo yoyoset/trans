@@ -332,7 +332,7 @@ SetWinEventHook 监听目标窗口的移动/缩放/最小化/前台切换/销毁
 13. **识别语言要手动选对**：Windows OCR 按语言建引擎，语言不对就一个字也读不出来（实测本机装了 en-us、zh-hans-cn）。取景框面板可选语言，默认用设置里的"对方语言"；没做按内容自动判断语言。
 7. **输入法候选框会被识别**：它是系统独立窗口，无法排除出截图，浮到取景区上就会被读进来。目前的应对是刷新节奏可选「手动」（存在取景框本地偏好里，不在 settings.json）；打字时自动暂停识别尚未做。手动模式下重新打开取景框（主窗口或悬浮按钮）会立即读一轮，离开期间的新消息不会漏看。
 12. **悬浮按钮的窗口比图标大**：Windows 不让无边框窗口低于约 135 px 宽（实测 minWidth、显示后 set_size 都无效），所以窗口保持 136×56，再用 `SetWindowRgn` 裁成直径 44 的圆——圆外不显示也不挡鼠标——Windows 对无边框窗口有约 135 px 的最小宽度，实测 minWidth、显示后 set_size 都缩不回去。
-8. **尚未实现**：发送管道（SendJob 状态机）、面板贴靠目标窗口、自动更新。（日志已落盘：应用 `trans.log` + 上一次运行的 `trans.previous.log`，llama-server `llama-server.log`，均在 `%LOCALAPPDATA%m.trans.chatogs`。）
+8. **尚未实现**：面板贴靠目标窗口、自动更新。发送已做一半：可以复制并粘贴到取景区所在的窗口（可选回车），没有做重试/确认的状态机；预设 delivery=copy_only 的场景（游戏）只复制不模拟按键。（日志已落盘：应用 `trans.log` + 上一次运行的 `trans.previous.log`，llama-server `llama-server.log`，均在 `%LOCALAPPDATA%\com.trans.chat\logs`。）
 9. **前端测试只覆盖取景框状态层，也没有接入 eslint**：vitest 覆盖布局/刷新偏好解析、句子上限、过期回复翻译丢弃、单句失败隔离、校对上下文（替换 api 模块，不需要 Tauri）；组件渲染没有测试。
 10. **没有 CI**：仓库还没有远程，质量门只在本地由 `scripts/check.sh` 执行；发布到 GitHub 时再加 workflow（届时用 windows runner，trans-win 只在 Windows 编译）。
 11. **停止 `tauri dev` 后 vite 子进程可能残留**，占着 1430 端口，下次启动报端口占用；需手动结束对应 node 进程。只影响开发，不影响用户。
