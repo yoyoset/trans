@@ -82,7 +82,8 @@ pub fn handle_close(app: &AppHandle, label: &str) -> Result<(), CommandError> {
     match label {
         MAIN => collapse_to_bubble(app),
         LENS => close_lens(app),
-        BUBBLE => show_main(app),
+        // 悬浮图标关不掉：它是常驻入口，关掉就没有呼出取景框的地方了。
+        BUBBLE => Ok(()),
         _ => Ok(()),
     }
 }
@@ -91,13 +92,11 @@ pub fn show_main(app: &AppHandle) -> Result<(), CommandError> {
     let main = window(app, MAIN)?;
     main.unminimize().map_err(CommandError::internal)?;
     main.show().map_err(CommandError::internal)?;
-    main.set_focus().map_err(CommandError::internal)?;
-    window(app, BUBBLE)?.hide().map_err(CommandError::internal)
+    main.set_focus().map_err(CommandError::internal)
 }
 
-/// 主窗口收起成悬浮按钮。按钮第一次出现放在屏幕右下角，之后保持用户拖到的位置。
-pub fn collapse_to_bubble(app: &AppHandle) -> Result<(), CommandError> {
-    window(app, MAIN)?.hide().map_err(CommandError::internal)?;
+/// 悬浮图标常驻桌面：启动时就显示，主窗口开着也留着——它是随时呼出取景框的入口。
+pub fn show_bubble(app: &AppHandle) -> Result<(), CommandError> {
     let bubble = window(app, BUBBLE)?;
     if !BUBBLE_PLACED.swap(true, Ordering::Relaxed) {
         // 上次的位置优先；从来没摆过才放到右下角。大小不还原：圆形尺寸是固定的。
@@ -109,6 +108,12 @@ pub fn collapse_to_bubble(app: &AppHandle) -> Result<(), CommandError> {
     show_overlay(&bubble)?;
     clip_bubble(&bubble);
     Ok(())
+}
+
+/// 关主窗口：只是收起，悬浮图标本来就在桌面上。
+pub fn collapse_to_bubble(app: &AppHandle) -> Result<(), CommandError> {
+    window(app, MAIN)?.hide().map_err(CommandError::internal)?;
+    show_bubble(app)
 }
 
 /// 把悬浮按钮窗口裁成小圆。失败只是按钮大一点，不影响使用。

@@ -49,6 +49,9 @@ pub fn run() {
             let state = state::AppState::initialize(app.handle())?;
             app.manage(state);
             state::spawn_apply_engines(app.handle().clone());
+            if let Err(error) = overlay_windows::show_bubble(app.handle()) {
+                tracing::warn!(?error, "failed to show the floating icon");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

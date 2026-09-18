@@ -72,7 +72,7 @@ export function BubbleWindow() {
         }
         className={clsx(
           "flex h-11 w-11 cursor-pointer select-none items-center justify-center",
-          "rounded-full border-2 bg-zinc-900/95 text-base font-semibold text-zinc-100 hover:bg-zinc-800",
+          "rounded-full border-2 bg-zinc-900/95 hover:bg-zinc-800",
           capturing ? "border-emerald-400" : "border-sky-400/80",
         )}
         onPointerDown={(e) => {
@@ -104,7 +104,7 @@ export function BubbleWindow() {
           showMenu().catch((error) => console.error("menu failed", error));
         }}
       >
-        译
+        <img src="/bubble-icon.png" alt="" className="h-6 w-6" draggable={false} />
       </button>
     </div>
   );
