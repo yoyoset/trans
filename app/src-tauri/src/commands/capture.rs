@@ -7,6 +7,7 @@ use trans_application::capture_pipeline::{CaptureSource, CaptureTarget};
 use trans_domain::chat_lines::ParsedMessage;
 use trans_domain::geometry::Rect;
 use trans_domain::lang::Lang;
+use trans_presets::Delivery;
 
 use crate::capture_session::{CaptureInfo, CaptureStatus};
 use crate::error::CommandError;
@@ -61,6 +62,62 @@ pub fn open_lens(app: AppHandle) -> Result<(), CommandError> {
 pub fn close_lens(app: AppHandle) -> Result<(), CommandError> {
     tracing::info!(capturing = state_is_running(&app), "lens hidden");
     overlay_windows::close_lens(&app)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendReplyArgs {
+    pub text: String,
+    /// 预设决定能不能替用户按键：游戏场景只复制。
+    pub preset_id: String,
+    /// 粘贴到这个屏幕坐标所在的窗口（一般取取景区中心）。为空表示只复制。
+    #[serde(default)]
+    pub paste_at: Option<(i32, i32)>,
+    /// 粘贴后是否回车发送。
+    #[serde(default)]
+    pub press_enter: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SendReplyResult {
+    /// 是否真的替用户粘贴了（false = 只复制到剪贴板）。
+    pub pasted: bool,
+}
+
+/// 把译文送回聊天窗口：写剪贴板；预设允许且给了坐标时再替用户粘贴（可选回车）。
+#[tauri::command]
+pub async fn send_reply(request: SendReplyArgs, state: State<'_, AppState>) -> Result<SendReplyResult, CommandError> {
+    let text = request.text.trim().to_owned();
+    if text.is_empty() {
+        return Err(CommandError::new("empty_reply", "没有可发送的内容"));
+    }
+    let preset = state
+        .presets
+        .iter()
+        .find(|preset| preset.id == request.preset_id)
+        .ok_or_else(|| CommandError::new("preset_not_found", format!("找不到预设 {}", request.preset_id)))?;
+    let may_type = preset.delivery != Delivery::CopyOnly;
+
+    #[cfg(windows)]
+    trans_win::set_clipboard_text(&text).map_err(|error| CommandError::new("clipboard_failed", error))?;
+
+    let Some((x, y)) = request.paste_at.filter(|_| may_type) else {
+        tracing::info!(chars = text.chars().count(), "reply copied to clipboard");
+        return Ok(SendReplyResult { pasted: false });
+    };
+    #[cfg(windows)]
+    {
+        let press_enter = request.press_enter;
+        tauri::async_runtime::spawn_blocking(move || trans_win::paste_at(x, y, press_enter))
+            .await
+            .map_err(CommandError::internal)?
+            .map_err(|error| CommandError::new("paste_failed", error))?;
+    }
+    tracing::info!(
+        chars = text.chars().count(),
+        press_enter = request.press_enter,
+        "reply pasted into the chat window"
+    );
+    Ok(SendReplyResult { pasted: true })
 }
 
 /// 取景框让开鼠标 / 恢复，返回切换后是否在让开鼠标。

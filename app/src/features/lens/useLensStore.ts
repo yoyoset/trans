@@ -6,6 +6,7 @@ import {
   onCapturedLines,
   onCaptureStatus,
   refreshCapture,
+  sendReply,
   setCaptureInterval,
   startCapture,
   stopCapture,
@@ -110,6 +111,8 @@ interface LensState {
   calibrateLine: (id: string) => Promise<void>;
   translateReply: (text: string) => Promise<void>;
   calibrateReply: () => Promise<void>;
+  /** 把译文送回聊天窗口。`pasteAt` 为空时只复制到剪贴板。 */
+  sendReply: (pasteAt: [number, number] | null, pressEnter: boolean) => Promise<boolean>;
 }
 
 const emptyReply: Reply = { text: "", translation: null, calibrated: null, busy: null, error: null };
@@ -286,6 +289,20 @@ export const useLensStore = create<LensState>((set, get) => {
         patchReply(source, { translation, busy: null }); // 用户已经改了输入时，旧结果直接丢弃
       } catch (error) {
         patchReply(source, { error: toAppError(error), busy: null });
+      }
+    },
+
+    sendReply: async (pasteAt, pressEnter) => {
+      const { reply } = get();
+      const text = (reply.calibrated ?? reply.translation)?.translation ?? "";
+      const preset = presetId();
+      if (!text || !preset) return false;
+      try {
+        const { pasted } = await sendReply({ text, preset_id: preset, paste_at: pasteAt, press_enter: pressEnter });
+        return pasted;
+      } catch (error) {
+        patchReply(reply.text, { error: toAppError(error) });
+        return false;
       }
     },
 

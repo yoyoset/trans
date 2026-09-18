@@ -180,7 +180,7 @@ export function LensPanel({
         <div ref={listEnd} />
       </div>
 
-      <ReplyBox />
+      <ReplyBox captureRect={captureRect} />
     </aside>
   );
 }

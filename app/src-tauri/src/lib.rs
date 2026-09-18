@@ -79,6 +79,7 @@ pub fn run() {
             commands::capture::open_lens,
             commands::capture::close_lens,
             commands::capture::toggle_lens,
+            commands::capture::send_reply,
             commands::capture::toggle_lens_click_through,
             commands::capture::lens_click_through,
             commands::capture::list_hotkeys,

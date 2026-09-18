@@ -29,6 +29,14 @@ export const showMainWindow = () => call<void>("show_main_window");
 /** 真正退出应用（主窗口的关闭按钮只是收起成悬浮按钮）。 */
 export const quitApp = () => call<void>("quit_app");
 
+/** 把译文送回聊天窗口：写剪贴板，允许时再粘贴（可选回车）。返回是否真的粘贴了。 */
+export const sendReply = (request: {
+  text: string;
+  preset_id: string;
+  paste_at?: [number, number] | null;
+  press_enter?: boolean;
+}) => call<{ pasted: boolean }>("send_reply", { request });
+
 /** 取景框让开鼠标 / 恢复，返回切换后是否在让开鼠标。 */
 export const toggleLensClickThrough = () =>
   call<boolean>("toggle_lens_click_through");
