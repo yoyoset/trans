@@ -67,3 +67,9 @@ cargo test -p trans-providers --test local_engine_smoke -- --ignored --nocapture
 ## 许可证
 
 MIT OR Apache-2.0，任选其一，全文见 [LICENSE-MIT](LICENSE-MIT) 与 [LICENSE-APACHE](LICENSE-APACHE)。
+
+## 赞助
+
+如果这个项目帮你省了时间，欢迎赞助一点 Token（算力）。你的支持会直接变成下一轮的推理与测试成本，让它持续维护。
+
+<table><tr><td align="center"><img src="docs/donate/donate_alipay.png" width="160" alt="支付宝"><br>支付宝</td><td align="center"><img src="docs/donate/donate_wechat.png" width="160" alt="微信支付"><br>微信支付</td><td align="center"><img src="docs/donate/donate_paypal.png" width="160" alt="PayPal"><br>PayPal</td></tr></table>
