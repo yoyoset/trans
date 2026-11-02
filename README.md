@@ -8,6 +8,8 @@
 
 设计与实测记录见 [docs/architecture.md](docs/architecture.md) 和 [docs/m0/](docs/m0/)。
 
+> **本仓库只提供框架（源码）**，不含模型/二进制。要下载什么、怎么验证，见 [SETUP_FOR_AI.md](SETUP_FOR_AI.md)（写给你的 AI 助手看的清单）。
+
 ## 目录结构
 
 ```
